@@ -214,6 +214,43 @@ class MonitorDialog(tk.Toplevel):
             side="left", padx=(120, 0)
         )
 
+        # JS filter ────────────────────────────────────────────────────
+        js_label_row = ttk.Frame(self._ocr_frame)
+        js_label_row.pack(fill="x", padx=4, pady=(6, 0))
+        ttk.Label(
+            js_label_row,
+            text="JS Filter (optional):",
+            anchor="w",
+        ).pack(side="left")
+        ttk.Label(
+            js_label_row,
+            text="function body receiving 'text', must return a string",
+            foreground="grey",
+            font=("TkDefaultFont", 8),
+        ).pack(side="left", padx=6)
+
+        js_text_frame = ttk.Frame(self._ocr_frame)
+        js_text_frame.pack(fill="x", padx=4, pady=(2, 4))
+        self._js_filter_text = tk.Text(
+            js_text_frame, height=4, width=50, wrap="none",
+            font=("Courier", 9),
+        )
+        js_scrollbar_y = ttk.Scrollbar(
+            js_text_frame, orient="vertical",
+            command=self._js_filter_text.yview,
+        )
+        js_scrollbar_x = ttk.Scrollbar(
+            js_text_frame, orient="horizontal",
+            command=self._js_filter_text.xview,
+        )
+        self._js_filter_text.config(
+            yscrollcommand=js_scrollbar_y.set,
+            xscrollcommand=js_scrollbar_x.set,
+        )
+        js_scrollbar_y.pack(side="right", fill="y")
+        js_scrollbar_x.pack(side="bottom", fill="x")
+        self._js_filter_text.pack(side="left", fill="both", expand=True)
+
         # ── Colour config ─────────────────────────────────────────────
         self._color_frame = ttk.LabelFrame(self, text="Colour Settings")
         self._color_frame.pack(fill="x", padx=8, pady=4)
@@ -316,6 +353,9 @@ class MonitorDialog(tk.Toplevel):
         self._ocr_threshold_var.set(str(m.ocr_config.threshold_value))
         self._ocr_threshold_high_var.set(str(m.ocr_config.threshold_value_high))
         self._case_var.set(m.ocr_config.case_sensitive)
+        self._js_filter_text.delete("1.0", "end")
+        if m.ocr_config.js_filter:
+            self._js_filter_text.insert("1.0", m.ocr_config.js_filter)
 
         self._color_var = list(m.color_config.target_color)
         self._swatch.config(bg=_rgb_to_hex(self._color_var))
@@ -439,6 +479,7 @@ class MonitorDialog(tk.Toplevel):
             threshold_value=ocr_thresh,
             threshold_value_high=ocr_thresh_high,
             case_sensitive=self._case_var.get(),
+            js_filter=self._js_filter_text.get("1.0", "end-1c").rstrip("\n"),
         )
         m.color_config = ColorConfig(
             target_color=list(self._color_var),

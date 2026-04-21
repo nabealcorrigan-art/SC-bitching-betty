@@ -7,6 +7,8 @@ against the conditions defined in ``OcrConfig``.
 
 from __future__ import annotations
 
+import json
+import logging
 import re
 from typing import Optional
 
@@ -22,7 +24,15 @@ try:
 except ImportError:
     _PIL_AVAILABLE = False
 
+try:
+    from py_mini_racer import MiniRacer as _MiniRacer
+    _MINI_RACER_AVAILABLE = True
+except ImportError:
+    _MINI_RACER_AVAILABLE = False
+
 from src.monitor_model import OcrConfig
+
+logger = logging.getLogger(__name__)
 
 # Characters allowed in OCR output for *text* modes: letters, digits,
 # whitespace, and the decimal separators '.' and ',' used by numeric
@@ -32,6 +42,62 @@ _OCR_NOISE_PATTERN = re.compile(r"[^a-zA-Z0-9\s.,]")
 # For *numeric* modes only keep characters that can appear in a number:
 # digits, decimal separators, sign chars, and spaces (used as separators).
 _NON_NUMERIC_PATTERN = re.compile(r"[^\d.,+\- ]")
+
+# Lazily-created shared MiniRacer context (V8 isolate).  Creating one
+# instance once and reusing it avoids repeated isolate-startup overhead.
+_js_context: Optional["_MiniRacer"] = None
+
+
+def _get_js_context() -> Optional["_MiniRacer"]:
+    """Return the shared MiniRacer context, creating it on first call."""
+    global _js_context
+    if not _MINI_RACER_AVAILABLE:
+        return None
+    if _js_context is None:
+        _js_context = _MiniRacer()
+    return _js_context
+
+
+def apply_js_filter(text: str, js_code: str) -> str:
+    """
+    Transform *text* by running *js_code* inside a JavaScript function.
+
+    *js_code* is treated as the **body** of a function that receives the
+    OCR text in the variable ``text`` and must ``return`` the modified
+    string.  Example::
+
+        return text.replace(/[^0-9]/g, '');
+
+    If *js_code* is empty, ``py_mini_racer`` is unavailable, or the script
+    raises an error, the original *text* is returned unchanged and the
+    error is logged at WARNING level so the user can diagnose mistakes.
+
+    .. note::
+        Only the user's own filter code is executed.  The OCR text is
+        passed as a JSON-encoded string argument so it cannot be
+        interpreted as code.
+
+    Parameters
+    ----------
+    text:    Raw OCR string to transform.
+    js_code: JavaScript function body.
+    """
+    if not js_code.strip():
+        return text
+    ctx = _get_js_context()
+    if ctx is None:
+        logger.warning(
+            "JS filter is configured but py_mini_racer is not installed. "
+            "Run: pip install py_mini_racer"
+        )
+        return text
+    try:
+        script = f"(function(text) {{ {js_code} }})({json.dumps(text)})"
+        result = ctx.eval(script)
+        return str(result) if result is not None else text
+    except Exception as exc:
+        logger.warning("JS filter raised an error: %s", exc)
+        return text
 
 
 class OcrReader:

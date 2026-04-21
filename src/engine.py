@@ -15,7 +15,7 @@ from typing import Callable, Dict, List, Optional
 
 from src.monitor_model import Monitor
 from src.capture import ScreenCapture
-from src.ocr import OcrReader
+from src.ocr import OcrReader, apply_js_filter
 from src.colors import ColorDetector
 from src.alerts import AlertManager
 
@@ -118,7 +118,13 @@ class MonitoringEngine:
                 triggered = False
                 if monitor.monitor_type == "ocr":
                     raw_text = self._ocr.read_text(img)
-                    # Notify UI with the raw OCR characters.
+                    # Apply optional per-monitor JavaScript filter so the
+                    # user can reshape the OCR string before matching.
+                    if monitor.ocr_config.js_filter:
+                        raw_text = apply_js_filter(
+                            raw_text, monitor.ocr_config.js_filter
+                        )
+                    # Notify UI with the (possibly filtered) OCR text.
                     if self._on_ocr_text:
                         try:
                             self._on_ocr_text(monitor.id, raw_text)

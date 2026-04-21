@@ -55,6 +55,24 @@ class OcrConfig:
     case_sensitive: bool = False
     """Whether text comparisons are case-sensitive."""
 
+    js_filter: str = ""
+    """
+    Optional JavaScript function body that transforms the raw OCR text
+    before it is compared against trigger conditions.
+
+    The script receives the raw OCR string as the variable ``text`` and
+    must return the (possibly modified) string.  Errors in the script are
+    silently ignored and the original text is used instead.
+
+    Example – keep only digits::
+
+        return text.replace(/[^0-9]/g, '');
+
+    Example – trim and upper-case::
+
+        return text.trim().toUpperCase();
+    """
+
 
 @dataclass
 class ColorConfig:
@@ -134,6 +152,7 @@ class Monitor:
                 "threshold_value": self.ocr_config.threshold_value,
                 "threshold_value_high": self.ocr_config.threshold_value_high,
                 "case_sensitive": self.ocr_config.case_sensitive,
+                "js_filter": self.ocr_config.js_filter,
             },
             "color_config": {
                 "target_color": self.color_config.target_color,
@@ -166,6 +185,7 @@ class Monitor:
                     ocr_raw.get("threshold_value_high", 100.0)
                 ),
                 case_sensitive=bool(ocr_raw.get("case_sensitive", False)),
+                js_filter=ocr_raw.get("js_filter", ""),
             ),
             color_config=ColorConfig(
                 target_color=color_raw.get("target_color", [255, 0, 0]),
