@@ -57,7 +57,9 @@ python betty.py
      - `contains` – fires if the text appears anywhere in the OCR result
      - `exact` – fires if the entire OCR result matches
      - `regex` – fires if a regular expression matches
-     - `numeric_above` / `numeric_below` – fires when the largest number found by OCR crosses the threshold
+     - `numeric_above` – fires when the number found by OCR **exceeds** the threshold (non-numeric characters in the OCR output are ignored automatically)
+     - `numeric_below` – fires when the number found by OCR **falls below** the threshold (non-numeric characters ignored)
+     - `numeric_outside` – fires when the number is **below** the low threshold **or above** the high threshold; useful for alerting when a reading leaves a normal operating range (non-numeric characters ignored)
    - **Colour** – pick a target colour, tolerance radius (in RGB Euclidean distance), and the pixel percentage that triggers the alert.
 4. Browse for a **Sound File** (`.wav` / `.ogg`).
 5. Set **Cooldown** (minimum seconds between repeated alerts) and **Poll interval**.

@@ -166,7 +166,7 @@ class MonitorDialog(tk.Toplevel):
             row,
             textvariable=self._match_type_var,
             values=["contains", "exact", "regex",
-                    "numeric_above", "numeric_below"],
+                    "numeric_above", "numeric_below", "numeric_outside"],
             state="readonly",
             width=18,
         )
@@ -184,9 +184,27 @@ class MonitorDialog(tk.Toplevel):
             state="disabled"
         )
         self._ocr_thresh_entry.pack(side="left", padx=(4, 0))
-        ttk.Label(row, text="(for numeric_above/below)").pack(
+        ttk.Label(row, text="(for numeric match types)").pack(
             side="left", padx=4
         )
+
+        self._ocr_thresh_high_row = ttk.Frame(self._ocr_frame)
+        self._ocr_thresh_high_row.pack(fill="x", padx=4, pady=2)
+        ttk.Label(
+            self._ocr_thresh_high_row, text="High threshold:", width=16,
+            anchor="e"
+        ).pack(side="left")
+        self._ocr_threshold_high_var = tk.StringVar(value="100")
+        self._ocr_thresh_high_entry = ttk.Entry(
+            self._ocr_thresh_high_row,
+            textvariable=self._ocr_threshold_high_var,
+            width=10,
+            state="disabled",
+        )
+        self._ocr_thresh_high_entry.pack(side="left", padx=(4, 0))
+        ttk.Label(
+            self._ocr_thresh_high_row, text="(for numeric_outside)"
+        ).pack(side="left", padx=4)
 
         row = ttk.Frame(self._ocr_frame)
         row.pack(fill="x", padx=4, pady=2)
@@ -296,6 +314,7 @@ class MonitorDialog(tk.Toplevel):
         self._ocr_text_var.set(m.ocr_config.trigger_text)
         self._match_type_var.set(m.ocr_config.match_type)
         self._ocr_threshold_var.set(str(m.ocr_config.threshold_value))
+        self._ocr_threshold_high_var.set(str(m.ocr_config.threshold_value_high))
         self._case_var.set(m.ocr_config.case_sensitive)
 
         self._color_var = list(m.color_config.target_color)
@@ -328,10 +347,14 @@ class MonitorDialog(tk.Toplevel):
 
     def _toggle_numeric(self, event=None) -> None:
         mt = self._match_type_var.get()
-        if mt in ("numeric_above", "numeric_below"):
+        if mt in ("numeric_above", "numeric_below", "numeric_outside"):
             self._ocr_thresh_entry.config(state="normal")
         else:
             self._ocr_thresh_entry.config(state="disabled")
+        if mt == "numeric_outside":
+            self._ocr_thresh_high_entry.config(state="normal")
+        else:
+            self._ocr_thresh_high_entry.config(state="disabled")
 
     def _pick_region(self) -> None:
         self.withdraw()
@@ -375,6 +398,7 @@ class MonitorDialog(tk.Toplevel):
             tolerance = int(self._tolerance_var.get())
             color_pct = float(self._color_pct_var.get())
             ocr_thresh = float(self._ocr_threshold_var.get())
+            ocr_thresh_high = float(self._ocr_threshold_high_var.get())
             reg_x = int(self._reg_x_var.get())
             reg_y = int(self._reg_y_var.get())
             reg_w = max(_MIN_REGION_DIMENSION, int(self._reg_w_var.get()))
@@ -391,6 +415,18 @@ class MonitorDialog(tk.Toplevel):
             )
             return
 
+        if (
+            self._match_type_var.get() == "numeric_outside"
+            and ocr_thresh >= ocr_thresh_high
+        ):
+            messagebox.showerror(
+                "Invalid thresholds",
+                "For numeric_outside the low threshold must be less than the "
+                "high threshold.",
+                parent=self,
+            )
+            return
+
         m = self._monitor
         m.name = self._name_var.get().strip() or "Monitor"
         m.enabled = self._enabled_var.get()
@@ -401,6 +437,7 @@ class MonitorDialog(tk.Toplevel):
             trigger_text=self._ocr_text_var.get(),
             match_type=self._match_type_var.get(),
             threshold_value=ocr_thresh,
+            threshold_value_high=ocr_thresh_high,
             case_sensitive=self._case_var.get(),
         )
         m.color_config = ColorConfig(

@@ -24,9 +24,14 @@ except ImportError:
 
 from src.monitor_model import OcrConfig
 
-# Characters allowed in OCR output: letters, digits, whitespace, and the
-# decimal separators '.' and ',' used by numeric threshold matching.
+# Characters allowed in OCR output for *text* modes: letters, digits,
+# whitespace, and the decimal separators '.' and ',' used by numeric
+# threshold matching.
 _OCR_NOISE_PATTERN = re.compile(r"[^a-zA-Z0-9\s.,]")
+
+# For *numeric* modes only keep characters that can appear in a number:
+# digits, decimal separators, sign chars, and spaces (used as separators).
+_NON_NUMERIC_PATTERN = re.compile(r"[^\d.,+\- ]")
 
 
 class OcrReader:
@@ -127,15 +132,33 @@ class OcrReader:
                     return False
 
             case "numeric_above":
-                value = self._largest_number(raw)
+                # Use the first number found; non-numeric chars are stripped
+                # first so OCR artefacts (e.g. a letter inside "4O5") don't
+                # prevent correct parsing.  For "above" monitors the first
+                # number is the current reading; later numbers (e.g. a max
+                # indicator in "45/100") are intentionally ignored.
+                numeric_text = self._strip_non_numeric(raw)
+                value = self._first_number(numeric_text)
                 return value is not None and value > config.threshold_value
 
             case "numeric_below":
+                numeric_text = self._strip_non_numeric(raw)
                 # Use the *first* number found so that composite strings
                 # like "45/100" (where 100 is the max, not the current
                 # value) do not prevent the alert from firing.
-                value = self._first_number(raw)
+                value = self._first_number(numeric_text)
                 return value is not None and value < config.threshold_value
+
+            case "numeric_outside":
+                # Alert when the value is outside [threshold_value, threshold_value_high].
+                numeric_text = self._strip_non_numeric(raw)
+                value = self._first_number(numeric_text)
+                if value is None:
+                    return False
+                return (
+                    value < config.threshold_value
+                    or value > config.threshold_value_high
+                )
 
             case _:
                 return False
@@ -143,6 +166,19 @@ class OcrReader:
     # ------------------------------------------------------------------
     # Private
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _strip_non_numeric(text: str) -> str:
+        """
+        Return *text* with every character that cannot appear in a number
+        removed.  Keeps digits, decimal separators (``.`` and ``,``),
+        sign characters (``+`` / ``-``), and spaces.
+
+        This is applied before number extraction in numeric match modes so
+        that OCR artefacts such as stray letters embedded inside a digit
+        string (e.g. ``"4O5"`` → ``"45"``) do not corrupt the reading.
+        """
+        return _NON_NUMERIC_PATTERN.sub("", text)
 
     @staticmethod
     def _largest_number(text: str) -> Optional[float]:
