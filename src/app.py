@@ -479,7 +479,7 @@ class MonitorDialog(tk.Toplevel):
             threshold_value=ocr_thresh,
             threshold_value_high=ocr_thresh_high,
             case_sensitive=self._case_var.get(),
-            js_filter=self._js_filter_text.get("1.0", "end-1c").strip(),
+            js_filter=self._js_filter_text.get("1.0", "end-1c").rstrip("\n"),
         )
         m.color_config = ColorConfig(
             target_color=list(self._color_var),

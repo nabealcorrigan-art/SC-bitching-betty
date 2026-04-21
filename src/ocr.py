@@ -8,6 +8,7 @@ against the conditions defined in ``OcrConfig``.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Optional
 
@@ -30,6 +31,8 @@ except ImportError:
     _MINI_RACER_AVAILABLE = False
 
 from src.monitor_model import OcrConfig
+
+logger = logging.getLogger(__name__)
 
 # Characters allowed in OCR output for *text* modes: letters, digits,
 # whitespace, and the decimal separators '.' and ',' used by numeric
@@ -66,7 +69,13 @@ def apply_js_filter(text: str, js_code: str) -> str:
         return text.replace(/[^0-9]/g, '');
 
     If *js_code* is empty, ``py_mini_racer`` is unavailable, or the script
-    raises an error, the original *text* is returned unchanged.
+    raises an error, the original *text* is returned unchanged and the
+    error is logged at WARNING level so the user can diagnose mistakes.
+
+    .. note::
+        Only the user's own filter code is executed.  The OCR text is
+        passed as a JSON-encoded string argument so it cannot be
+        interpreted as code.
 
     Parameters
     ----------
@@ -77,12 +86,17 @@ def apply_js_filter(text: str, js_code: str) -> str:
         return text
     ctx = _get_js_context()
     if ctx is None:
+        logger.warning(
+            "JS filter is configured but py_mini_racer is not installed. "
+            "Run: pip install py_mini_racer"
+        )
         return text
     try:
         script = f"(function(text) {{ {js_code} }})({json.dumps(text)})"
         result = ctx.eval(script)
         return str(result) if result is not None else text
-    except Exception:
+    except Exception as exc:
+        logger.warning("JS filter raised an error: %s", exc)
         return text
 
 
