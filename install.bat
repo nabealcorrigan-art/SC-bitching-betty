@@ -36,7 +36,7 @@ if %PYMIN% lss 11 (
 
 
 echo [1/3] Installing Python dependencies...
-pip install -r "%~dp0requirements.txt"
+pip install --prefer-binary -r "%~dp0requirements.txt"
 if %errorlevel% neq 0 (
     echo.
     echo ERROR: pip install failed.
