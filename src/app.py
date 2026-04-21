@@ -661,10 +661,7 @@ class BettyApp:
             import numpy  # noqa: F401
         except ImportError:
             missing.append("numpy")
-        try:
-            import pygame  # noqa: F401
-        except ImportError:
-            missing.append("pygame")
+        pass  # Sound: winsound is a stdlib module, always available on Windows
 
         if missing:
             self._dep_var.set(f"Missing: {', '.join(missing)}")
