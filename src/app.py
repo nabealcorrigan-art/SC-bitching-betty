@@ -534,7 +534,7 @@ class BettyApp:
         self._config = ConfigManager()
         self._alert = AlertManager()
         self._detector = ColorDetector()
-        self._ocr: Optional[OcrReader] = None
+        self._ocr: OcrReader = OcrReader()
 
         # Per-monitor live-status indicators: {id: bool (triggered)}
         self._live_status: Dict[str, bool] = {}
@@ -549,6 +549,10 @@ class BettyApp:
 
         self._build_ui()
         self._load_config()
+        # Re-run dependency check now that settings (including the Tesseract
+        # path) have been loaded; the first check inside _build_ui ran before
+        # the config was available.
+        self._check_deps()
 
     # ------------------------------------------------------------------
     # Public API
@@ -715,6 +719,10 @@ class BettyApp:
             missing.append("numpy")
         if missing:
             self._dep_var.set(f"Missing: {', '.join(missing)}")
+        elif not self._ocr.available:
+            self._dep_var.set(
+                "OCR unavailable – install Tesseract-OCR and set its path in Settings"
+            )
         else:
             self._dep_var.set("All dependencies OK")
 
@@ -858,6 +866,19 @@ class BettyApp:
                 "Add at least one monitor before starting.",
             )
             return
+
+        # Warn if any OCR monitor is enabled but Tesseract is not available.
+        has_ocr = any(
+            m.enabled and m.monitor_type == "ocr" for m in self._monitors
+        )
+        if has_ocr and not self._ocr.available:
+            messagebox.showwarning(
+                "OCR unavailable",
+                "One or more monitors use OCR, but Tesseract-OCR is not "
+                "installed or its path is not configured.\n\n"
+                "OCR monitors will never trigger until Tesseract is set up.\n"
+                "Go to File → Settings to set the Tesseract executable path.",
+            )
 
         self._engine = MonitoringEngine(
             monitors=self._monitors,
