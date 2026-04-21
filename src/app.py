@@ -39,6 +39,7 @@ from src.colors import ColorDetector
 from src.alerts import AlertManager
 from src.config import ConfigManager
 from src.engine import MonitoringEngine
+from src.regex_range import numeric_range_to_regex
 
 
 # ---------------------------------------------------------------------------
@@ -51,6 +52,128 @@ _MIN_REGION_DIMENSION = 1
 def _rgb_to_hex(rgb: List[int]) -> str:
     r, g, b = (max(0, min(255, c)) for c in rgb[:3])
     return f"#{r:02x}{g:02x}{b:02x}"
+
+
+# ===========================================================================
+# Range-to-regex helper dialog
+# ===========================================================================
+
+class RangeRegexDialog(tk.Toplevel):
+    """
+    Modal dialog that generates a regex pattern for a numeric range.
+
+    The user enters a *From* and *To* integer, clicks **Generate**, then
+    optionally clicks **Use this Regex** to insert the result into the calling
+    field.  The generated pattern is wrapped in ``\\b`` word boundaries so
+    that it matches whole numbers rather than substrings.
+    """
+
+    def __init__(self, parent: tk.Widget) -> None:
+        super().__init__(parent)
+        self.title("Generate Regex for Number Range")
+        self.resizable(False, False)
+        self.grab_set()
+
+        self.result: Optional[str] = None
+        self._build()
+        self.wait_window()
+
+    # ------------------------------------------------------------------
+    # Build UI
+    # ------------------------------------------------------------------
+
+    def _build(self) -> None:
+        pad = {"padx": 8, "pady": 4}
+
+        # ── Range inputs ──────────────────────────────────────────────
+        row = ttk.Frame(self)
+        row.pack(fill="x", **pad)
+        ttk.Label(row, text="From:", width=8, anchor="e").pack(side="left")
+        self._lo_var = tk.StringVar(value="0")
+        ttk.Entry(row, textvariable=self._lo_var, width=10).pack(
+            side="left", padx=(4, 12)
+        )
+        ttk.Label(row, text="To:", width=4, anchor="e").pack(side="left")
+        self._hi_var = tk.StringVar(value="100")
+        ttk.Entry(row, textvariable=self._hi_var, width=10).pack(
+            side="left", padx=(4, 0)
+        )
+
+        ttk.Button(self, text="Generate", command=self._generate).pack(
+            anchor="e", padx=8, pady=(0, 4)
+        )
+
+        # ── Result display ────────────────────────────────────────────
+        row = ttk.Frame(self)
+        row.pack(fill="x", **pad)
+        ttk.Label(row, text="Regex:", width=8, anchor="e").pack(side="left")
+        self._result_var = tk.StringVar()
+        self._result_entry = ttk.Entry(
+            row, textvariable=self._result_var, width=44, state="disabled"
+        )
+        self._result_entry.pack(side="left", padx=(4, 0))
+
+        ttk.Label(
+            self,
+            text=(
+                "The pattern is bounded by \\b so it matches whole numbers.\n"
+                "Set Match type to 'regex' in the monitor settings."
+            ),
+            foreground="grey",
+            justify="left",
+        ).pack(fill="x", padx=12, pady=(0, 4))
+
+        # ── Buttons ───────────────────────────────────────────────────
+        btn_row = ttk.Frame(self)
+        btn_row.pack(fill="x", padx=8, pady=8)
+        self._use_btn = ttk.Button(
+            btn_row,
+            text="Use this Regex",
+            command=self._on_ok,
+            width=16,
+            state="disabled",
+        )
+        self._use_btn.pack(side="right", padx=4)
+        ttk.Button(
+            btn_row, text="Cancel", command=self.destroy, width=10
+        ).pack(side="right")
+
+    # ------------------------------------------------------------------
+    # Event handlers
+    # ------------------------------------------------------------------
+
+    def _generate(self) -> None:
+        try:
+            lo = int(self._lo_var.get())
+            hi = int(self._hi_var.get())
+        except ValueError:
+            messagebox.showerror(
+                "Invalid input",
+                "Please enter whole (non-negative) numbers for both bounds.",
+                parent=self,
+            )
+            return
+        try:
+            regex = numeric_range_to_regex(lo, hi)
+        except ValueError as exc:
+            messagebox.showerror("Invalid range", str(exc), parent=self)
+            return
+        self._result_entry.config(state="normal")
+        self._result_var.set(regex)
+        self._result_entry.config(state="readonly")
+        self._use_btn.config(state="normal")
+
+    def _on_ok(self) -> None:
+        regex = self._result_var.get()
+        if not regex:
+            messagebox.showwarning(
+                "No regex generated",
+                "Click 'Generate' first.",
+                parent=self,
+            )
+            return
+        self.result = regex
+        self.destroy()
 
 
 # ===========================================================================
@@ -155,6 +278,9 @@ class MonitorDialog(tk.Toplevel):
         ttk.Entry(row, textvariable=self._ocr_text_var, width=30).pack(
             side="left", padx=(4, 0)
         )
+        ttk.Button(
+            row, text="Range → Regex…", command=self._open_range_regex
+        ).pack(side="left", padx=(6, 0))
 
         row = ttk.Frame(self._ocr_frame)
         row.pack(fill="x", padx=4, pady=2)
@@ -332,6 +458,13 @@ class MonitorDialog(tk.Toplevel):
             self._ocr_thresh_entry.config(state="normal")
         else:
             self._ocr_thresh_entry.config(state="disabled")
+
+    def _open_range_regex(self) -> None:
+        dlg = RangeRegexDialog(self)
+        if dlg.result:
+            self._ocr_text_var.set(dlg.result)
+            self._match_type_var.set("regex")
+            self._toggle_numeric()
 
     def _pick_region(self) -> None:
         self.withdraw()
