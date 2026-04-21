@@ -36,6 +36,8 @@ _INSTRUCTION  = (
     "Click and drag to select a region.  "
     "Press  Esc  or  right-click  to cancel."
 )
+_CONFIRM_INSTRUCTION = "Region selected!  Closing…"
+_CONFIRM_DELAY_MS    = 1200   # ms to keep the confirmed selection visible
 
 
 class RegionSelector:
@@ -56,6 +58,7 @@ class RegionSelector:
         self._start_x: Optional[int] = None
         self._start_y: Optional[int] = None
         self._rect_id: Optional[int] = None
+        self._banner_text_id: Optional[int] = None
         self._root: Optional[tk.Misc] = None
         self._canvas: Optional[tk.Canvas] = None
 
@@ -84,6 +87,7 @@ class RegionSelector:
         self._start_x = None
         self._start_y = None
         self._rect_id = None
+        self._banner_text_id = None
 
         # ------------------------------------------------------------------
         # Create the overlay window (hidden) so we can query the real
@@ -150,7 +154,7 @@ class RegionSelector:
         self._canvas.create_rectangle(
             0, 0, screen_w, _BANNER_H, fill=_BANNER_BG, outline=""
         )
-        self._canvas.create_text(
+        self._banner_text_id = self._canvas.create_text(
             screen_w // 2,
             _BANNER_H // 2,
             text=_INSTRUCTION,
@@ -221,7 +225,28 @@ class RegionSelector:
             "width": x2 - x1,
             "height": y2 - y1,
         }
-        self._close()
+
+        # Replace the dashed drag rectangle with a solid confirmed outline and
+        # update the banner so the user can see the region before the overlay
+        # closes.
+        if self._rect_id is not None:
+            self._canvas.delete(self._rect_id)
+        self._rect_id = self._canvas.create_rectangle(
+            x1, y1, x2, y2,
+            outline=_RECT_COLOR,
+            width=3,
+        )
+        if self._banner_text_id:
+            self._canvas.itemconfig(
+                self._banner_text_id, text=_CONFIRM_INSTRUCTION
+            )
+        self._canvas.unbind("<ButtonPress-1>")
+        self._canvas.unbind("<B1-Motion>")
+        self._canvas.unbind("<ButtonRelease-1>")
+        self._root.unbind("<Escape>")
+
+        # Close after a short delay so the user can see the selection.
+        self._root.after(_CONFIRM_DELAY_MS, self._close)
 
     def _on_cancel(self, event: tk.Event = None) -> None:
         self._region = None
