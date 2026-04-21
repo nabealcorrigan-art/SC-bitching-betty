@@ -601,9 +601,14 @@ class BettyApp:
         list_frame = ttk.LabelFrame(self._root, text="Monitors")
         list_frame.pack(fill="both", expand=True, padx=8, pady=4)
 
+        # Inner frame with a solid border around the treeview.
+        tree_border = tk.Frame(list_frame, relief="solid", borderwidth=1)
+        tree_border.pack(side="left", fill="both", expand=True,
+                         padx=4, pady=4)
+
         columns = ("name", "type", "region", "sound", "status")
         self._tree = ttk.Treeview(
-            list_frame, columns=columns, show="headings", selectmode="browse"
+            tree_border, columns=columns, show="headings", selectmode="browse"
         )
         self._tree.heading("name",   text="Name")
         self._tree.heading("type",   text="Type")
@@ -620,13 +625,25 @@ class BettyApp:
         scrollbar = ttk.Scrollbar(
             list_frame, orient="vertical", command=self._tree.yview
         )
-        scrollbar.pack(side="right", fill="y")
+        scrollbar.pack(side="right", fill="y", pady=4)
         self._tree.config(yscrollcommand=scrollbar.set)
 
         # Tag colouring for live status.
         self._tree.tag_configure("triggered",  foreground="#cc0000")
         self._tree.tag_configure("ok",         foreground="#007700")
         self._tree.tag_configure("disabled",   foreground="#888888")
+
+        # ── Drag-and-drop reordering ───────────────────────────────────
+        # A canvas line is drawn over the treeview to show the drop target.
+        self._drag_source: Optional[str] = None
+        self._drag_canvas = tk.Canvas(
+            self._tree, height=2, bg="#0055cc",
+            highlightthickness=0, borderwidth=0,
+        )
+        self._tree.bind("<ButtonPress-1>",   self._on_drag_start)
+        self._tree.bind("<B1-Motion>",       self._on_drag_motion)
+        self._tree.bind("<ButtonRelease-1>", self._on_drag_release)
+        self._tree.bind("<Escape>",          self._on_drag_cancel)
 
         # ── CRUD buttons ──────────────────────────────────────────────
         crud = ttk.Frame(self._root)
@@ -843,6 +860,77 @@ class BettyApp:
         self._stop_btn.config(state="disabled")
         self._status_var.set(self._STATUS_IDLE)
         self._refresh_tree()
+
+    # ------------------------------------------------------------------
+    # Drag-and-drop helpers
+    # ------------------------------------------------------------------
+
+    def _on_drag_start(self, event: tk.Event) -> None:
+        item = self._tree.identify_row(event.y)
+        self._drag_source = item if item else None
+
+    def _on_drag_motion(self, event: tk.Event) -> None:
+        if not self._drag_source:
+            return
+        target = self._tree.identify_row(event.y)
+        if target and target != self._drag_source:
+            self._tree.config(cursor="sb_v_double_arrow")
+            # Draw a line at the top edge of the target row to show where
+            # the item will be inserted.
+            bbox = self._tree.bbox(target)
+            if bbox:
+                x, y, width, height = bbox
+                line_y = y if event.y < y + height // 2 else y + height
+                self._drag_canvas.place(x=0, y=line_y - 1,
+                                        width=width, height=2)
+                self._drag_canvas.lift()
+        else:
+            self._drag_canvas.place_forget()
+            self._tree.config(cursor="")
+
+    def _on_drag_release(self, event: tk.Event) -> None:
+        self._drag_canvas.place_forget()
+        self._tree.config(cursor="")
+        if not self._drag_source:
+            return
+        src = self._drag_source
+        self._drag_source = None
+
+        target = self._tree.identify_row(event.y)
+        if not target or target == src:
+            return
+
+        src_idx = next(
+            (i for i, m in enumerate(self._monitors) if m.id == src), None
+        )
+        tgt_idx = next(
+            (i for i, m in enumerate(self._monitors) if m.id == target), None
+        )
+        if src_idx is None or tgt_idx is None:
+            return
+
+        # Determine whether to insert before or after the target row.
+        bbox = self._tree.bbox(target)
+        if bbox:
+            _, y, _, height = bbox
+            insert_after = event.y >= y + height // 2
+        else:
+            insert_after = tgt_idx > src_idx
+
+        mon = self._monitors.pop(src_idx)
+        insert_at = tgt_idx if not insert_after else tgt_idx + 1
+        # Adjust for the removed element.
+        if src_idx < insert_at:
+            insert_at -= 1
+        self._monitors.insert(insert_at, mon)
+        self._save_config()
+        self._refresh_tree()
+        self._tree.selection_set(src)
+
+    def _on_drag_cancel(self, event: tk.Event = None) -> None:
+        self._drag_canvas.place_forget()
+        self._tree.config(cursor="")
+        self._drag_source = None
 
     # ------------------------------------------------------------------
     # Engine status callback (called on monitoring thread)
