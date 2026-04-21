@@ -59,6 +59,34 @@ class ScreenCapture:
         except Exception:
             return None
 
+    def capture_primary_screen(self) -> Optional["Image.Image"]:
+        """
+        Capture only the primary monitor.
+
+        ``mss.monitors`` always starts with the virtual desktop at index 0,
+        followed by each physical monitor starting at index 1.  Index 1 is
+        always the primary monitor.
+
+        Returns
+        -------
+        ``PIL.Image`` or ``None``.
+        """
+        if not _MSS_AVAILABLE or not _PIL_AVAILABLE:
+            return None
+
+        try:
+            with mss.mss() as sct:
+                # monitors[0] = virtual desktop, monitors[1] = primary monitor.
+                # mss guarantees at least two entries whenever a display is present.
+                primary = sct.monitors[1]
+                screenshot = sct.grab(primary)
+                img = Image.frombytes(
+                    "RGB", screenshot.size, screenshot.rgb
+                )
+                return img
+        except Exception:
+            return None
+
     def capture_full_screen(self) -> Optional["Image.Image"]:
         """
         Capture the entire virtual desktop (all monitors combined).

@@ -1,9 +1,12 @@
 """
 selector.py – Interactive screen-region selector.
 
-Grabs a full-screen screenshot, displays it in a full-screen tkinter
-window, and lets the user draw a selection rectangle with the mouse.
-Returns the selected region as ``{"x", "y", "width", "height"}``.
+Captures a screenshot of the primary monitor, displays it in a
+borderless full-screen tkinter window, and lets the user draw a
+selection rectangle with the mouse.  The drawn rectangle has a red
+outline and **no fill** so the underlying screen content remains fully
+visible.  Returns the selected region as ``{"x", "y", "width",
+"height"}``.
 """
 
 from __future__ import annotations
@@ -22,10 +25,14 @@ except ImportError:
 from src.capture import ScreenCapture
 
 
-_OVERLAY_COLOR = "#000000"
-_RECT_COLOR = "#ff3c3c"
-_RECT_DASH = (6, 4)
-_INSTRUCTION = (
+_OVERLAY_BG   = "#000001"   # near-black canvas background (fills any gap around the photo)
+_RECT_COLOR   = "#ff3c3c"   # red outline for the drag rectangle
+_RECT_FILL    = ""          # no fill – keep screen content visible
+_RECT_WIDTH   = 2
+_RECT_DASH    = (6, 4)
+_BANNER_BG    = "#1a1a1a"
+_BANNER_H     = 46
+_INSTRUCTION  = (
     "Click and drag to select a region.  "
     "Press  Esc  or  right-click  to cancel."
 )
@@ -72,9 +79,42 @@ class RegionSelector:
             )
             return None
 
+        self._region = None
+        self._start_x = None
+        self._start_y = None
+        self._rect_id = None
+
+        # ------------------------------------------------------------------
+        # Create the root window first (hidden) so we can query the real
+        # logical screen dimensions before capturing the screenshot.
+        # NOTE: Do NOT use -fullscreen together with overrideredirect – on
+        # Windows the window manager no longer controls the window, so
+        # -fullscreen has no effect and the window stays tiny.  Instead we
+        # use an explicit geometry() call to position and size it ourselves.
+        # ------------------------------------------------------------------
+        self._root = tk.Tk()
+        self._root.withdraw()                  # hide while we set up
+        self._root.overrideredirect(True)      # borderless
+        self._root.attributes("-topmost", True)
+        self._root.update_idletasks()          # flush pending geometry requests
+
+        screen_w = self._root.winfo_screenwidth()
+        screen_h = self._root.winfo_screenheight()
+
+        # Position the window to cover exactly the primary screen.
+        self._root.geometry(f"{screen_w}x{screen_h}+0+0")
+        self._root.config(cursor="crosshair")
+
+        # ------------------------------------------------------------------
+        # Capture the primary monitor and resize to logical screen dimensions.
+        # mss returns physical pixels; on HiDPI/scaled displays these differ
+        # from logical pixels reported by tkinter, so we resize rather than
+        # crop to ensure the photo fills the canvas correctly.
+        # ------------------------------------------------------------------
         capture = ScreenCapture()
-        img = capture.capture_full_screen()
+        img = capture.capture_primary_screen()
         if img is None:
+            self._root.destroy()
             messagebox.showerror(
                 "Capture failed",
                 "Could not capture the screen.\n"
@@ -82,25 +122,8 @@ class RegionSelector:
             )
             return None
 
-        self._region = None
-        self._start_x = None
-        self._start_y = None
-        self._rect_id = None
-
-        self._root = tk.Tk()
-        self._root.overrideredirect(True)          # no window chrome
-        self._root.attributes("-fullscreen", True)
-        self._root.attributes("-topmost", True)
-        self._root.config(cursor="crosshair")
-
-        screen_w = self._root.winfo_screenwidth()
-        screen_h = self._root.winfo_screenheight()
-
-        # Resize screenshot to primary screen if needed (multi-monitor
-        # virtual desktops can be wider/taller than the primary).
         if img.width != screen_w or img.height != screen_h:
-            img = img.crop((0, 0, min(img.width, screen_w),
-                            min(img.height, screen_h)))
+            img = img.resize((screen_w, screen_h), Image.LANCZOS)
 
         photo = ImageTk.PhotoImage(img)
 
@@ -110,7 +133,7 @@ class RegionSelector:
             height=screen_h,
             cursor="crosshair",
             highlightthickness=0,
-            bg=_OVERLAY_COLOR,
+            bg=_OVERLAY_BG,
         )
         self._canvas.pack(fill="both", expand=True)
         self._canvas.create_image(0, 0, anchor="nw", image=photo)
@@ -118,21 +141,26 @@ class RegionSelector:
 
         # Instruction banner at the top.
         self._canvas.create_rectangle(
-            0, 0, screen_w, 46, fill="#1a1a1a", outline=""
+            0, 0, screen_w, _BANNER_H, fill=_BANNER_BG, outline=""
         )
         self._canvas.create_text(
             screen_w // 2,
-            23,
+            _BANNER_H // 2,
             text=_INSTRUCTION,
             fill="white",
             font=("Segoe UI", 13, "bold"),
         )
 
-        self._canvas.bind("<ButtonPress-1>", self._on_press)
-        self._canvas.bind("<B1-Motion>", self._on_drag)
+        self._canvas.bind("<ButtonPress-1>",   self._on_press)
+        self._canvas.bind("<B1-Motion>",       self._on_drag)
         self._canvas.bind("<ButtonRelease-1>", self._on_release)
-        self._canvas.bind("<ButtonPress-3>", self._on_cancel)
-        self._root.bind("<Escape>", self._on_cancel)
+        self._canvas.bind("<ButtonPress-3>",   self._on_cancel)
+        self._root.bind("<Escape>",            self._on_cancel)
+
+        # Show the window and grab all input so drag events are never lost.
+        self._root.deiconify()
+        self._root.focus_force()
+        self._root.grab_set()
 
         self._root.mainloop()
         return self._region
