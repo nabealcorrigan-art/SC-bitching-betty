@@ -32,8 +32,16 @@ class AlertManager:
     Plays sound files when an alert is triggered.
 
     The sound is played on a daemon thread so it never blocks the
-    monitoring loop.
+    monitoring loop.  A lock ensures that at most one sound plays at a
+    time; if a play is already in progress the new request is silently
+    skipped, preventing the crash that occurs when ``winsound.PlaySound``
+    is called concurrently from multiple threads.
     """
+
+    def __init__(self) -> None:
+        # Non-blocking: if the lock is held (sound already playing) the
+        # new play request is dropped rather than queued.
+        self._play_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Public API
@@ -45,7 +53,8 @@ class AlertManager:
 
         Silently does nothing if the audio backend is unavailable, the
         file does not exist, or the file cannot be loaded.  Only ``.wav``
-        files are supported.
+        files are supported.  If a sound is already playing, this call
+        is a no-op so alerts never stack up.
         """
         if not sound_file or not os.path.isfile(sound_file):
             return
@@ -67,11 +76,17 @@ class AlertManager:
 
     def _play_blocking(self, sound_file: str) -> None:
         """Play the sound file, blocking the calling thread until done."""
-        if _BACKEND == "winsound":
-            try:
-                _winsound.PlaySound(
-                    sound_file,
-                    _winsound.SND_FILENAME | _winsound.SND_NODEFAULT,
-                )
-            except Exception:
-                pass
+        if not self._play_lock.acquire(blocking=False):
+            # Another thread is already playing – skip this request.
+            return
+        try:
+            if _BACKEND == "winsound":
+                try:
+                    _winsound.PlaySound(
+                        sound_file,
+                        _winsound.SND_FILENAME | _winsound.SND_NODEFAULT,
+                    )
+                except Exception:
+                    pass
+        finally:
+            self._play_lock.release()

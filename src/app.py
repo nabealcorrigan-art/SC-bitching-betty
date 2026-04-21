@@ -538,6 +538,11 @@ class BettyApp:
 
         # Per-monitor live-status indicators: {id: bool (triggered)}
         self._live_status: Dict[str, bool] = {}
+        # Most-recent raw OCR text per monitor: {id: str}
+        self._ocr_texts: Dict[str, str] = {}
+        # Debounce flags – only one pending callback at a time for each update.
+        self._tree_refresh_pending: bool = False
+        self._ocr_display_pending: bool = False
 
         self._engine: Optional[MonitoringEngine] = None
 
@@ -664,6 +669,18 @@ class BettyApp:
                    command=self._toggle_monitor).pack(side="left", padx=4)
         ttk.Button(crud, text="Drag & Select Region",
                    command=self._drag_select_region).pack(side="left", padx=4)
+
+        # ── Live OCR output ───────────────────────────────────────────
+        ocr_out_frame = ttk.LabelFrame(self._root, text="Live OCR Output")
+        ocr_out_frame.pack(fill="x", padx=8, pady=(0, 4))
+
+        self._ocr_output_text = tk.Text(
+            ocr_out_frame, height=3, state="disabled",
+            wrap="word", relief="flat",
+            background=self._root.cget("background"),
+            font=("Courier", 9),
+        )
+        self._ocr_output_text.pack(fill="x", padx=4, pady=4)
 
         # ── Status bar ────────────────────────────────────────────────
         status_bar = ttk.Frame(self._root, relief="sunken")
@@ -886,6 +903,7 @@ class BettyApp:
             ocr_reader=self._ocr,
             color_detector=self._detector,
             on_status=self._on_engine_status,
+            on_ocr_text=self._on_engine_ocr_text,
         )
         self._engine.start()
 
@@ -899,10 +917,14 @@ class BettyApp:
             self._engine = None
 
         self._live_status.clear()
+        self._ocr_texts.clear()
+        self._tree_refresh_pending = False
+        self._ocr_display_pending = False
         self._start_btn.config(state="normal")
         self._stop_btn.config(state="disabled")
         self._status_var.set(self._STATUS_IDLE)
         self._refresh_tree()
+        self._update_ocr_display()
 
     # ------------------------------------------------------------------
     # Drag-and-drop helpers
@@ -976,13 +998,52 @@ class BettyApp:
         self._drag_source = None
 
     # ------------------------------------------------------------------
-    # Engine status callback (called on monitoring thread)
+    # Engine status callbacks (called on monitoring thread)
     # ------------------------------------------------------------------
 
     def _on_engine_status(self, monitor_id: str, triggered: bool) -> None:
         self._live_status[monitor_id] = triggered
-        # Schedule a tree refresh on the main thread.
-        self._root.after(0, self._refresh_tree)
+        # Debounce: only schedule one refresh at a time to avoid flooding
+        # the event queue when many monitors fire in quick succession.
+        if not self._tree_refresh_pending:
+            self._tree_refresh_pending = True
+            self._root.after(100, self._do_tree_refresh)
+
+    def _do_tree_refresh(self) -> None:
+        self._tree_refresh_pending = False
+        try:
+            self._refresh_tree()
+        except Exception:
+            pass
+
+    def _on_engine_ocr_text(self, monitor_id: str, text: str) -> None:
+        self._ocr_texts[monitor_id] = text
+        if not self._ocr_display_pending:
+            self._ocr_display_pending = True
+            self._root.after(200, self._do_ocr_display)
+
+    def _do_ocr_display(self) -> None:
+        self._ocr_display_pending = False
+        self._update_ocr_display()
+
+    def _update_ocr_display(self) -> None:
+        """Refresh the Live OCR Output widget with the latest reads."""
+        lines: List[str] = []
+        for m in self._monitors:
+            if m.monitor_type == "ocr":
+                raw = self._ocr_texts.get(m.id, "")
+                # Show the text on one line, trimmed; use repr so
+                # invisible whitespace / newlines are visible.
+                preview = repr(raw.strip()) if raw.strip() else "(no text)"
+                lines.append(f"[{m.name}]  {preview}")
+        display = "\n".join(lines) if lines else "(no OCR monitors active)"
+        try:
+            self._ocr_output_text.config(state="normal")
+            self._ocr_output_text.delete("1.0", "end")
+            self._ocr_output_text.insert("1.0", display)
+            self._ocr_output_text.config(state="disabled")
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Window close

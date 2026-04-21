@@ -81,6 +81,15 @@ class OcrReader:
         config: ``OcrConfig`` describing the trigger condition.
         """
         raw = self.read_text(img)
+        return self.check_text(raw, config)
+
+    def check_text(self, raw: str, config: OcrConfig) -> bool:
+        """
+        Return ``True`` if *raw* (pre-read OCR text) satisfies *config*.
+
+        This allows callers that have already obtained the raw text to
+        avoid a second OCR pass.
+        """
         if not raw:
             return False
 
@@ -112,7 +121,10 @@ class OcrReader:
                 return value is not None and value > config.threshold_value
 
             case "numeric_below":
-                value = self._largest_number(raw)
+                # Use the *first* number found so that composite strings
+                # like "45/100" (where 100 is the max, not the current
+                # value) do not prevent the alert from firing.
+                value = self._first_number(raw)
                 return value is not None and value < config.threshold_value
 
             case _:
@@ -128,8 +140,24 @@ class OcrReader:
         Extract all decimal numbers from *text* and return the largest.
 
         Returns ``None`` if no numbers are found.
+        Supports both period (``3.14``) and comma (``3,14``) as the
+        decimal separator, as OCR often confuses the two.
         """
-        numbers = re.findall(r"[-+]?\d+(?:\.\d+)?", text)
+        numbers = re.findall(r"[-+]?\d+(?:[.,]\d+)?", text)
         if not numbers:
             return None
-        return max(float(n) for n in numbers)
+        return max(float(n.replace(",", ".")) for n in numbers)
+
+    @staticmethod
+    def _first_number(text: str) -> Optional[float]:
+        """
+        Return the first decimal number found in *text*.
+
+        Returns ``None`` if no number is found.
+        Supports both period (``3.14``) and comma (``3,14``) as the
+        decimal separator.
+        """
+        m = re.search(r"[-+]?\d+(?:[.,]\d+)?", text)
+        if m is None:
+            return None
+        return float(m.group().replace(",", "."))
