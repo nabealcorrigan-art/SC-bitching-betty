@@ -35,23 +35,47 @@ if %PYMIN% lss 11 (
 )
 
 
-echo [1/3] Installing Python dependencies...
-pip install --prefer-binary -r "%~dp0requirements.txt"
+echo [1/4] Upgrading pip to the latest version...
+python -m pip install --upgrade pip
 if %errorlevel% neq 0 (
     echo.
-    echo ERROR: pip install failed.
-    echo If pygame failed to install, ensure you are using Python 3.11 or newer.
+    echo WARNING: pip upgrade failed, continuing with existing pip version...
+    echo.
+)
+
+echo.
+echo [2/4] Installing pygame (binary only – no compilation)...
+pip install --only-binary=pygame "pygame>=2.5.2"
+if %errorlevel% neq 0 (
+    echo.
+    echo ERROR: pygame could not be installed as a binary wheel.
+    echo This usually means your Python version does not have a pre-built pygame wheel.
+    echo Supported Python versions for pygame on Windows: 3.11 and 3.12
+    echo.
+    echo Please install Python 3.12 from https://www.python.org/downloads/
+    echo Make sure to check "Add Python to PATH" during installation,
+    echo then run this installer again.
+    pause
+    exit /b 1
+)
+
+echo.
+echo [3/4] Installing remaining Python dependencies...
+pip install --prefer-binary mss Pillow pytesseract numpy
+if %errorlevel% neq 0 (
+    echo.
+    echo ERROR: Dependency install failed.
     echo Download Python from https://www.python.org/downloads/
     pause
     exit /b 1
 )
 
 echo.
-echo [2/3] Generating default alert sound (sounds\alert.wav)...
+echo [4/4] Generating default alert sound (sounds\alert.wav)...
 python "%~dp0generate_default_sound.py"
 
 echo.
-echo [3/3] Done!
+echo Done!
 echo.
 echo ============================================================
 echo  IMPORTANT – Tesseract-OCR
