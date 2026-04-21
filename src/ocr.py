@@ -60,14 +60,20 @@ class OcrReader:
 
     def read_text(self, img: "Image.Image") -> str:
         """
-        Run OCR on *img* and return the raw string output.
+        Run OCR on *img* and return the cleaned string output.
+
+        Non-alphanumeric characters (except whitespace and the decimal
+        separators ``.`` and ``,``) are removed to filter out common OCR
+        noise such as ``|``, ``!``, or ``@``, while preserving numeric
+        values with decimal points.
 
         Returns an empty string if OCR is unavailable or fails.
         """
         if not self.available:
             return ""
         try:
-            return pytesseract.image_to_string(img)
+            raw = pytesseract.image_to_string(img)
+            return re.sub(r"[^a-zA-Z0-9\s.,]", "", raw)
         except Exception:
             return ""
 
