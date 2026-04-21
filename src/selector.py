@@ -44,18 +44,19 @@ class RegionSelector:
 
     Usage::
 
-        selector = RegionSelector()
+        selector = RegionSelector(master=root)
         region = selector.select()   # blocks until the user picks a region
         if region:
             print(region)  # {"x": 100, "y": 200, "width": 300, "height": 50}
     """
 
-    def __init__(self) -> None:
+    def __init__(self, master: Optional[tk.Tk] = None) -> None:
+        self._master = master
         self._region: Optional[Dict] = None
         self._start_x: Optional[int] = None
         self._start_y: Optional[int] = None
         self._rect_id: Optional[int] = None
-        self._root: Optional[tk.Tk] = None
+        self._root: Optional[tk.Misc] = None
         self._canvas: Optional[tk.Canvas] = None
 
     # ------------------------------------------------------------------
@@ -85,14 +86,20 @@ class RegionSelector:
         self._rect_id = None
 
         # ------------------------------------------------------------------
-        # Create the root window first (hidden) so we can query the real
+        # Create the overlay window (hidden) so we can query the real
         # logical screen dimensions before capturing the screenshot.
+        # When a master Tk window already exists we must use Toplevel rather
+        # than a second tk.Tk(), because ImageTk.PhotoImage is bound to the
+        # first Tk interpreter and cannot be used with a separate one.
         # NOTE: Do NOT use -fullscreen together with overrideredirect – on
         # Windows the window manager no longer controls the window, so
         # -fullscreen has no effect and the window stays tiny.  Instead we
         # use an explicit geometry() call to position and size it ourselves.
         # ------------------------------------------------------------------
-        self._root = tk.Tk()
+        if self._master is not None:
+            self._root = tk.Toplevel(self._master)
+        else:
+            self._root = tk.Tk()
         self._root.withdraw()                  # hide while we set up
         self._root.overrideredirect(True)      # borderless
         self._root.attributes("-topmost", True)
@@ -162,7 +169,12 @@ class RegionSelector:
         self._root.focus_force()
         self._root.grab_set()
 
-        self._root.mainloop()
+        # wait_window blocks until _close() destroys the Toplevel/Tk window,
+        # which works correctly whether _root is a Toplevel or a standalone Tk.
+        if self._master is not None:
+            self._master.wait_window(self._root)
+        else:
+            self._root.mainloop()
         return self._region
 
     # ------------------------------------------------------------------
