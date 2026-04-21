@@ -544,6 +544,7 @@ class BettyApp:
         self._root = tk.Tk()
         self._root.title("SC Bitching Betty")
         self._root.minsize(560, 460)
+        self._root.config(bd=2, relief="groove")
         self._root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self._build_ui()
@@ -657,6 +658,8 @@ class BettyApp:
                    command=self._remove_monitor).pack(side="left", padx=4)
         ttk.Button(crud, text="Toggle Enable",
                    command=self._toggle_monitor).pack(side="left", padx=4)
+        ttk.Button(crud, text="Drag & Select Region",
+                   command=self._drag_select_region).pack(side="left", padx=4)
 
         # ── Status bar ────────────────────────────────────────────────
         status_bar = ttk.Frame(self._root, relief="sunken")
@@ -811,6 +814,25 @@ class BettyApp:
         m.enabled = not m.enabled
         self._save_config()
         self._refresh_tree()
+
+    def _drag_select_region(self) -> None:
+        m = self._selected_monitor()
+        if not m:
+            messagebox.showinfo(
+                "No selection",
+                "Please select a monitor to update its region.",
+            )
+            return
+        self._root.withdraw()
+        try:
+            sel = RegionSelector()
+            region = sel.select()
+        finally:
+            self._root.deiconify()
+        if region:
+            m.region = region
+            self._save_config()
+            self._refresh_tree()
 
     # ------------------------------------------------------------------
     # Settings
