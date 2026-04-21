@@ -336,7 +336,7 @@ class MonitorDialog(tk.Toplevel):
     def _pick_region(self) -> None:
         self.withdraw()
         try:
-            sel = RegionSelector()
+            sel = RegionSelector(master=self)
             region = sel.select()
         finally:
             self.deiconify()
@@ -825,7 +825,7 @@ class BettyApp:
             return
         self._root.withdraw()
         try:
-            sel = RegionSelector()
+            sel = RegionSelector(master=self._root)
             region = sel.select()
         finally:
             self._root.deiconify()
