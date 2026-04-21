@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from src.monitor_model import Monitor
 from src.capture import ScreenCapture
@@ -33,6 +33,9 @@ class MonitoringEngine:
     color_detector: Colour-threshold back-end.
     on_status:      Optional callback ``(monitor_id, triggered: bool)``
                     called on the polling thread when a result is ready.
+    on_ocr_text:    Optional callback ``(monitor_id, raw_text: str)``
+                    called after every OCR read so the UI can display
+                    what characters the program is currently seeing.
     """
 
     def __init__(
@@ -42,12 +45,14 @@ class MonitoringEngine:
         ocr_reader: OcrReader,
         color_detector: ColorDetector,
         on_status: Optional[Callable[[str, bool], None]] = None,
+        on_ocr_text: Optional[Callable[[str, str], None]] = None,
     ) -> None:
         self._monitors = monitors
         self._alert = alert_manager
         self._ocr = ocr_reader
         self._colors = color_detector
         self._on_status = on_status
+        self._on_ocr_text = on_ocr_text
 
         self._capture = ScreenCapture()
         self._lock = threading.Lock()
@@ -112,7 +117,14 @@ class MonitoringEngine:
                 # Evaluate condition.
                 triggered = False
                 if monitor.monitor_type == "ocr":
-                    triggered = self._ocr.check(img, monitor.ocr_config)
+                    raw_text = self._ocr.read_text(img)
+                    # Notify UI with the raw OCR characters.
+                    if self._on_ocr_text:
+                        try:
+                            self._on_ocr_text(monitor.id, raw_text)
+                        except Exception:
+                            pass
+                    triggered = self._ocr.check_text(raw_text, monitor.ocr_config)
                 elif monitor.monitor_type == "color":
                     triggered = self._colors.check(img, monitor.color_config)
 
