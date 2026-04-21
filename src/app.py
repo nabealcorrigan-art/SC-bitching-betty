@@ -927,7 +927,7 @@ class BettyApp:
         self._refresh_tree()
         self._tree.selection_set(src)
 
-    def _on_drag_cancel(self, event: tk.Event = None) -> None:
+    def _on_drag_cancel(self, event: Optional[tk.Event] = None) -> None:
         self._drag_canvas.place_forget()
         self._tree.config(cursor="")
         self._drag_source = None
