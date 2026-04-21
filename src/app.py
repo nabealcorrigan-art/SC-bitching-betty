@@ -109,7 +109,7 @@ class RangeRegexDialog(tk.Toplevel):
         ttk.Label(row, text="Regex:", width=8, anchor="e").pack(side="left")
         self._result_var = tk.StringVar()
         self._result_entry = ttk.Entry(
-            row, textvariable=self._result_var, width=44, state="disabled"
+            row, textvariable=self._result_var, width=44, state="readonly"
         )
         self._result_entry.pack(side="left", padx=(4, 0))
 
@@ -158,9 +158,8 @@ class RangeRegexDialog(tk.Toplevel):
         except ValueError as exc:
             messagebox.showerror("Invalid range", str(exc), parent=self)
             return
-        self._result_entry.config(state="normal")
-        self._result_var.set(regex)
         self._result_entry.config(state="readonly")
+        self._result_var.set(regex)
         self._use_btn.config(state="normal")
 
     def _on_ok(self) -> None:
