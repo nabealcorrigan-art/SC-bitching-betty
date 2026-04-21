@@ -144,6 +144,8 @@ class RegionSelector:
         # derive the scale factors needed to map canvas (logical) coordinates
         # back to physical screen coordinates when the user makes a selection.
         phys_w, phys_h = img.width, img.height
+        self._scale_x = phys_w / screen_w if screen_w > 0 else 1.0
+        self._scale_y = phys_h / screen_h if screen_h > 0 else 1.0
 
         # Retrieve the primary monitor's virtual-desktop offset.  mss uses
         # absolute physical coordinates, so we must add this offset when the
@@ -158,9 +160,6 @@ class RegionSelector:
                 self._monitor_top = _primary["top"]
         except Exception:
             pass
-
-        self._scale_x = phys_w / screen_w if screen_w > 0 else 1.0
-        self._scale_y = phys_h / screen_h if screen_h > 0 else 1.0
 
         if img.width != screen_w or img.height != screen_h:
             img = img.resize((screen_w, screen_h), Image.LANCZOS)

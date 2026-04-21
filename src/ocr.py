@@ -24,6 +24,10 @@ except ImportError:
 
 from src.monitor_model import OcrConfig
 
+# Characters allowed in OCR output: letters, digits, whitespace, and the
+# decimal separators '.' and ',' used by numeric threshold matching.
+_OCR_NOISE_PATTERN = re.compile(r"[^a-zA-Z0-9\s.,]")
+
 
 class OcrReader:
     """
@@ -73,7 +77,7 @@ class OcrReader:
             return ""
         try:
             raw = pytesseract.image_to_string(img)
-            return re.sub(r"[^a-zA-Z0-9\s.,]", "", raw)
+            return _OCR_NOISE_PATTERN.sub("", raw)
         except Exception:
             return ""
 
