@@ -1,47 +1,30 @@
 """
 alerts.py – Sound alert playback.
 
-Uses *pygame.mixer* to play `.wav` / `.ogg` sound files in a
-non-blocking way.  Falls back to a silent no-op if pygame is not
-installed so the rest of the application keeps working.
+Uses the standard-library *winsound* module (Windows) to play ``.wav``
+sound files in a non-blocking way via a daemon thread.  Falls back to a
+silent no-op on non-Windows platforms so the rest of the application
+keeps working.
 """
 
 from __future__ import annotations
 
 import os
+import sys
 import threading
-from typing import Dict, Optional
 
-try:
-    import pygame
-    import pygame.mixer
-    _PYGAME_AVAILABLE = True
-except ImportError:
-    _PYGAME_AVAILABLE = False
-
-
-_INIT_LOCK = threading.Lock()
-_MIXER_READY = False
-
-
-def _ensure_mixer() -> bool:
-    """Initialise pygame.mixer once, thread-safely.  Returns readiness."""
-    global _MIXER_READY
-    if _MIXER_READY:
-        return True
-    if not _PYGAME_AVAILABLE:
-        return False
-    with _INIT_LOCK:
-        if _MIXER_READY:
-            return True
-        try:
-            pygame.mixer.pre_init(frequency=44100, size=-16,
-                                  channels=2, buffer=512)
-            pygame.mixer.init()
-            _MIXER_READY = True
-            return True
-        except Exception:
-            return False
+# winsound is part of the Python standard library on Windows – no
+# third-party packages required.
+if sys.platform == "win32":
+    try:
+        import winsound as _winsound
+        _BACKEND = "winsound"
+    except ImportError:
+        _winsound = None  # type: ignore[assignment]
+        _BACKEND = "none"
+else:
+    _winsound = None  # type: ignore[assignment]
+    _BACKEND = "none"
 
 
 class AlertManager:
@@ -52,9 +35,6 @@ class AlertManager:
     monitoring loop.
     """
 
-    def __init__(self) -> None:
-        self._cache: Dict[str, "pygame.mixer.Sound"] = {}
-
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -63,8 +43,9 @@ class AlertManager:
         """
         Play *sound_file* asynchronously.
 
-        Silently does nothing if pygame is unavailable, the file does
-        not exist, or the file cannot be loaded.
+        Silently does nothing if the audio backend is unavailable, the
+        file does not exist, or the file cannot be loaded.  Only ``.wav``
+        files are supported.
         """
         if not sound_file or not os.path.isfile(sound_file):
             return
@@ -77,31 +58,20 @@ class AlertManager:
 
     @property
     def available(self) -> bool:
-        """``True`` when pygame.mixer is usable."""
-        return _ensure_mixer()
+        """``True`` when a sound backend is usable."""
+        return _BACKEND != "none"
 
     # ------------------------------------------------------------------
     # Private
     # ------------------------------------------------------------------
 
     def _play_blocking(self, sound_file: str) -> None:
-        """Load (or re-use from cache) and play the sound file."""
-        if not _ensure_mixer():
-            return
-        try:
-            sound = self._load(sound_file)
-            if sound is not None:
-                sound.play()
-        except Exception:
-            pass
-
-    def _load(self, sound_file: str) -> Optional["pygame.mixer.Sound"]:
-        """Return a cached or freshly loaded ``pygame.mixer.Sound``."""
-        if sound_file in self._cache:
-            return self._cache[sound_file]
-        try:
-            sound = pygame.mixer.Sound(sound_file)
-            self._cache[sound_file] = sound
-            return sound
-        except Exception:
-            return None
+        """Play the sound file, blocking the calling thread until done."""
+        if _BACKEND == "winsound":
+            try:
+                _winsound.PlaySound(
+                    sound_file,
+                    _winsound.SND_FILENAME | _winsound.SND_NODEFAULT,
+                )
+            except Exception:
+                pass

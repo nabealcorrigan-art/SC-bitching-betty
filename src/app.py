@@ -661,11 +661,6 @@ class BettyApp:
             import numpy  # noqa: F401
         except ImportError:
             missing.append("numpy")
-        try:
-            import pygame  # noqa: F401
-        except ImportError:
-            missing.append("pygame")
-
         if missing:
             self._dep_var.set(f"Missing: {', '.join(missing)}")
         else:
