@@ -45,6 +45,9 @@ from src.engine import MonitoringEngine
 # Helper – small icon square for a colour swatch
 # ---------------------------------------------------------------------------
 
+_MIN_REGION_DIMENSION = 1
+
+
 def _rgb_to_hex(rgb: List[int]) -> str:
     r, g, b = (max(0, min(255, c)) for c in rgb[:3])
     return f"#{r:02x}{g:02x}{b:02x}"
@@ -100,11 +103,26 @@ class MonitorDialog(tk.Toplevel):
         region_frame = ttk.LabelFrame(self, text="Screen Region")
         region_frame.pack(fill="x", padx=8, pady=4)
 
-        self._region_var = tk.StringVar()
-        ttk.Label(region_frame, textvariable=self._region_var,
-                  width=36, relief="sunken").pack(
-            side="left", padx=4, pady=4
-        )
+        coord_row = ttk.Frame(region_frame)
+        coord_row.pack(side="left", padx=4, pady=4)
+
+        self._reg_x_var = tk.IntVar(value=0)
+        self._reg_y_var = tk.IntVar(value=0)
+        self._reg_w_var = tk.IntVar(value=200)
+        self._reg_h_var = tk.IntVar(value=50)
+
+        for label_text, var in (
+            ("x:", self._reg_x_var),
+            ("y:", self._reg_y_var),
+            ("w:", self._reg_w_var),
+            ("h:", self._reg_h_var),
+        ):
+            ttk.Label(coord_row, text=label_text).pack(side="left")
+            ttk.Spinbox(
+                coord_row, textvariable=var,
+                from_=0, to=9999, width=6,
+            ).pack(side="left", padx=(0, 6))
+
         ttk.Button(region_frame, text="Select…",
                    command=self._pick_region).pack(side="left", padx=4)
 
@@ -269,9 +287,10 @@ class MonitorDialog(tk.Toplevel):
         self._name_var.set(m.name)
         self._enabled_var.set(m.enabled)
         r = m.region
-        self._region_var.set(
-            f"x={r['x']}  y={r['y']}  {r['width']}×{r['height']}"
-        )
+        self._reg_x_var.set(int(r.get("x", 0)))
+        self._reg_y_var.set(int(r.get("y", 0)))
+        self._reg_w_var.set(int(r.get("width", 200)))
+        self._reg_h_var.set(int(r.get("height", 50)))
         self._type_var.set(m.monitor_type)
 
         self._ocr_text_var.set(m.ocr_config.trigger_text)
@@ -323,10 +342,10 @@ class MonitorDialog(tk.Toplevel):
             self.deiconify()
         if region:
             self._monitor.region = region
-            self._region_var.set(
-                f"x={region['x']}  y={region['y']}  "
-                f"{region['width']}×{region['height']}"
-            )
+            self._reg_x_var.set(int(region["x"]))
+            self._reg_y_var.set(int(region["y"]))
+            self._reg_w_var.set(int(region["width"]))
+            self._reg_h_var.set(int(region["height"]))
 
     def _pick_color(self) -> None:
         initial = _rgb_to_hex(self._color_var)
@@ -356,14 +375,27 @@ class MonitorDialog(tk.Toplevel):
             tolerance = int(self._tolerance_var.get())
             color_pct = float(self._color_pct_var.get())
             ocr_thresh = float(self._ocr_threshold_var.get())
+            reg_x = int(self._reg_x_var.get())
+            reg_y = int(self._reg_y_var.get())
+            reg_w = max(_MIN_REGION_DIMENSION, int(self._reg_w_var.get()))
+            reg_h = max(_MIN_REGION_DIMENSION, int(self._reg_h_var.get()))
         except ValueError as exc:
             messagebox.showerror("Invalid value", str(exc), parent=self)
+            return
+        except tk.TclError:
+            messagebox.showerror(
+                "Invalid region coordinates",
+                "Please enter numeric values between 0 and 9999 for all "
+                "region fields.",
+                parent=self,
+            )
             return
 
         m = self._monitor
         m.name = self._name_var.get().strip() or "Monitor"
         m.enabled = self._enabled_var.get()
         m.monitor_type = self._type_var.get()
+        m.region = {"x": reg_x, "y": reg_y, "width": reg_w, "height": reg_h}
 
         m.ocr_config = OcrConfig(
             trigger_text=self._ocr_text_var.get(),
