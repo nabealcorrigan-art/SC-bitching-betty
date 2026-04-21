@@ -61,6 +61,13 @@ class RegionSelector:
         self._banner_text_id: Optional[int] = None
         self._root: Optional[tk.Misc] = None
         self._canvas: Optional[tk.Canvas] = None
+        # Scale factors from canvas (logical) pixels to physical screen pixels,
+        # and the primary monitor's offset in the virtual-desktop coordinate
+        # system used by mss.
+        self._scale_x: float = 1.0
+        self._scale_y: float = 1.0
+        self._monitor_left: int = 0
+        self._monitor_top: int = 0
 
     # ------------------------------------------------------------------
     # Public API
@@ -132,6 +139,27 @@ class RegionSelector:
                 "Check that mss and Pillow are installed.",
             )
             return None
+
+        # Record the physical pixel dimensions BEFORE any resize so we can
+        # derive the scale factors needed to map canvas (logical) coordinates
+        # back to physical screen coordinates when the user makes a selection.
+        phys_w, phys_h = img.width, img.height
+        self._scale_x = phys_w / screen_w if screen_w > 0 else 1.0
+        self._scale_y = phys_h / screen_h if screen_h > 0 else 1.0
+
+        # Retrieve the primary monitor's virtual-desktop offset.  mss uses
+        # absolute physical coordinates, so we must add this offset when the
+        # stored region is later passed back to capture_region().
+        self._monitor_left = 0
+        self._monitor_top = 0
+        try:
+            import mss as _mss
+            with _mss.mss() as _sct:
+                _primary = _sct.monitors[1]
+                self._monitor_left = _primary["left"]
+                self._monitor_top = _primary["top"]
+        except Exception:
+            pass
 
         if img.width != screen_w or img.height != screen_h:
             img = img.resize((screen_w, screen_h), Image.LANCZOS)
@@ -219,11 +247,21 @@ class RegionSelector:
         if x2 - x1 < 5 or y2 - y1 < 5:
             return
 
+        # Convert from canvas (logical) pixels to physical screen coordinates.
+        # The canvas was scaled down from physical pixels when the screenshot
+        # was resized to fit the logical screen dimensions.  mss expects
+        # absolute physical coordinates, so we scale back up and add the
+        # primary monitor's virtual-desktop offset.
+        phys_x1 = int(x1 * self._scale_x) + self._monitor_left
+        phys_y1 = int(y1 * self._scale_y) + self._monitor_top
+        phys_x2 = int(x2 * self._scale_x) + self._monitor_left
+        phys_y2 = int(y2 * self._scale_y) + self._monitor_top
+
         self._region = {
-            "x": x1,
-            "y": y1,
-            "width": x2 - x1,
-            "height": y2 - y1,
+            "x": phys_x1,
+            "y": phys_y1,
+            "width": phys_x2 - phys_x1,
+            "height": phys_y2 - phys_y1,
         }
 
         # Replace the dashed drag rectangle with a solid confirmed outline and
