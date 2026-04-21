@@ -30,15 +30,27 @@ class OcrConfig:
 
     Allowed values
     ~~~~~~~~~~~~~~
-    ``contains``      – OCR text contains *trigger_text* (default)
-    ``exact``         – OCR text equals *trigger_text*
-    ``regex``         – *trigger_text* is a regular-expression pattern
-    ``numeric_above`` – largest number found in OCR text > *threshold_value*
-    ``numeric_below`` – largest number found in OCR text < *threshold_value*
+    ``contains``        – OCR text contains *trigger_text* (default)
+    ``exact``           – OCR text equals *trigger_text*
+    ``regex``           – *trigger_text* is a regular-expression pattern
+    ``numeric_above``   – number in OCR text > *threshold_value*
+                          (non-numeric characters are ignored)
+    ``numeric_below``   – number in OCR text < *threshold_value*
+                          (non-numeric characters are ignored)
+    ``numeric_outside`` – number in OCR text < *threshold_value* **or**
+                          > *threshold_value_high*; use this to alert when
+                          a reading leaves a normal range
+                          (non-numeric characters are ignored)
     """
 
     threshold_value: float = 0.0
-    """Used when *match_type* is ``numeric_above`` or ``numeric_below``."""
+    """
+    Lower threshold used by ``numeric_above``, ``numeric_below``, and
+    ``numeric_outside``.
+    """
+
+    threshold_value_high: float = 100.0
+    """Upper threshold used by ``numeric_outside``."""
 
     case_sensitive: bool = False
     """Whether text comparisons are case-sensitive."""
@@ -120,6 +132,7 @@ class Monitor:
                 "trigger_text": self.ocr_config.trigger_text,
                 "match_type": self.ocr_config.match_type,
                 "threshold_value": self.ocr_config.threshold_value,
+                "threshold_value_high": self.ocr_config.threshold_value_high,
                 "case_sensitive": self.ocr_config.case_sensitive,
             },
             "color_config": {
@@ -149,6 +162,9 @@ class Monitor:
                 trigger_text=ocr_raw.get("trigger_text", ""),
                 match_type=ocr_raw.get("match_type", "contains"),
                 threshold_value=float(ocr_raw.get("threshold_value", 0.0)),
+                threshold_value_high=float(
+                    ocr_raw.get("threshold_value_high", 100.0)
+                ),
                 case_sensitive=bool(ocr_raw.get("case_sensitive", False)),
             ),
             color_config=ColorConfig(
