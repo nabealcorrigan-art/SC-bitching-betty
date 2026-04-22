@@ -28,7 +28,6 @@ class MonitoringEngine:
     ----------
     monitors:       Shared list of ``Monitor`` objects (may be mutated
                     externally; access is protected by ``_lock``).
-    alert_manager:  Plays sound files when a condition fires.
     ocr_reader:     OCR back-end.
     color_detector: Colour-threshold back-end.
     on_status:      Optional callback ``(monitor_id, triggered: bool)``
@@ -36,19 +35,23 @@ class MonitoringEngine:
     on_ocr_text:    Optional callback ``(monitor_id, raw_text: str)``
                     called after every OCR read so the UI can display
                     what characters the program is currently seeing.
+
+    Each monitor gets its own ``AlertManager`` instance so that alerts
+    for different monitors are completely independent and can play at
+    exactly the same time without one blocking another.
     """
 
     def __init__(
         self,
         monitors: List[Monitor],
-        alert_manager: AlertManager,
         ocr_reader: OcrReader,
         color_detector: ColorDetector,
         on_status: Optional[Callable[[str, bool], None]] = None,
         on_ocr_text: Optional[Callable[[str, str], None]] = None,
     ) -> None:
         self._monitors = monitors
-        self._alert = alert_manager
+        # One AlertManager per monitor ID – created on first use.
+        self._alert_managers: Dict[str, AlertManager] = {}
         self._ocr = ocr_reader
         self._colors = color_detector
         self._on_status = on_status
@@ -150,13 +153,21 @@ class MonitoringEngine:
                     if now - last_alert >= monitor.cooldown:
                         pending_alerts.append(monitor)
 
-            # Play all pending alerts concurrently.
+            # Play all pending alerts.  Each monitor has its own
+            # AlertManager instance so their playback is fully
+            # independent and all sounds can start at the same time.
             for monitor in pending_alerts:
                 self._last_alert[monitor.id] = now
-                self._alert.play(monitor.sound_file)
+                self._alert_for(monitor.id).play(monitor.sound_file)
 
             # Short sleep to avoid busy-spinning at 100% CPU.
             time.sleep(0.005)
+
+    def _alert_for(self, monitor_id: str) -> AlertManager:
+        """Return (creating if necessary) the AlertManager for *monitor_id*."""
+        if monitor_id not in self._alert_managers:
+            self._alert_managers[monitor_id] = AlertManager()
+        return self._alert_managers[monitor_id]
 
 
 
