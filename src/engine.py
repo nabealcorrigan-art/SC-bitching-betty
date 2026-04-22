@@ -169,5 +169,3 @@ class MonitoringEngine:
             self._alert_managers[monitor_id] = AlertManager()
         return self._alert_managers[monitor_id]
 
-
-
