@@ -1,10 +1,11 @@
 """
 alerts.py – Sound alert playback.
 
-Uses the standard-library *winsound* module (Windows) to play ``.wav``
-sound files in a non-blocking way via a daemon thread.  Falls back to a
-silent no-op on non-Windows platforms so the rest of the application
-keeps working.
+Uses *pygame.mixer* to play ``.wav`` sound files concurrently so that
+multiple alerts can play at the same time.  Falls back to the
+standard-library *winsound* module (Windows-only, single sound at a
+time) when pygame is unavailable, and degrades to a silent no-op on
+platforms where neither backend is usable.
 """
 
 from __future__ import annotations
@@ -13,35 +14,40 @@ import os
 import sys
 import threading
 
-# winsound is part of the Python standard library on Windows – no
-# third-party packages required.
-if sys.platform == "win32":
-    try:
-        import winsound as _winsound
-        _BACKEND = "winsound"
-    except ImportError:
+# Prefer pygame for concurrent multi-channel mixing.
+try:
+    import pygame as _pygame
+    _pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
+    _pygame.mixer.init()
+    _BACKEND = "pygame"
+except Exception:
+    _pygame = None  # type: ignore[assignment]
+    # Fall back to winsound (Windows only, single-sound-at-a-time).
+    if sys.platform == "win32":
+        try:
+            import winsound as _winsound
+            _BACKEND = "winsound"
+        except ImportError:
+            _winsound = None  # type: ignore[assignment]
+            _BACKEND = "none"
+    else:
         _winsound = None  # type: ignore[assignment]
         _BACKEND = "none"
-else:
-    _winsound = None  # type: ignore[assignment]
-    _BACKEND = "none"
+
+# Protect winsound (non-reentrant) with a lock; pygame doesn't need one.
+_winsound_lock = threading.Lock()
 
 
 class AlertManager:
     """
     Plays sound files when an alert is triggered.
 
-    The sound is played on a daemon thread so it never blocks the
-    monitoring loop.  A lock ensures that at most one sound plays at a
-    time; if a play is already in progress the new request is silently
-    skipped, preventing the crash that occurs when ``winsound.PlaySound``
-    is called concurrently from multiple threads.
+    When the *pygame* backend is active each sound is loaded into a
+    ``pygame.mixer.Sound`` object and played on a free mixer channel,
+    allowing multiple alerts to overlap.  The *winsound* fallback still
+    plays one sound at a time (skipping concurrent requests) because
+    ``winsound.PlaySound`` is not re-entrant.
     """
-
-    def __init__(self) -> None:
-        # Non-blocking: if the lock is held (sound already playing) the
-        # new play request is dropped rather than queued.
-        self._play_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Public API
@@ -53,8 +59,8 @@ class AlertManager:
 
         Silently does nothing if the audio backend is unavailable, the
         file does not exist, or the file cannot be loaded.  Only ``.wav``
-        files are supported.  If a sound is already playing, this call
-        is a no-op so alerts never stack up.
+        files are supported.  Multiple calls may overlap when the pygame
+        backend is active.
         """
         if not sound_file or not os.path.isfile(sound_file):
             return
@@ -76,17 +82,27 @@ class AlertManager:
 
     def _play_blocking(self, sound_file: str) -> None:
         """Play the sound file, blocking the calling thread until done."""
-        if not self._play_lock.acquire(blocking=False):
-            # Another thread is already playing – skip this request.
-            return
-        try:
-            if _BACKEND == "winsound":
-                try:
-                    _winsound.PlaySound(
-                        sound_file,
-                        _winsound.SND_FILENAME | _winsound.SND_NODEFAULT,
-                    )
-                except Exception:
-                    pass
-        finally:
-            self._play_lock.release()
+        if _BACKEND == "pygame":
+            try:
+                sound = _pygame.mixer.Sound(sound_file)
+                channel = sound.play()
+                if channel is not None:
+                    # Block this thread until playback finishes so the
+                    # daemon thread lifetime matches the sound duration.
+                    while channel.get_busy():
+                        _pygame.time.wait(100)
+            except Exception:
+                pass
+        elif _BACKEND == "winsound":
+            if not _winsound_lock.acquire(blocking=False):
+                # winsound is not re-entrant – skip if busy.
+                return
+            try:
+                _winsound.PlaySound(
+                    sound_file,
+                    _winsound.SND_FILENAME | _winsound.SND_NODEFAULT,
+                )
+            except Exception:
+                pass
+            finally:
+                _winsound_lock.release()
