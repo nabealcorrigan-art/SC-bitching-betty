@@ -39,7 +39,6 @@ from src.capture import ScreenCapture
 from src.selector import RegionSelector
 from src.ocr import OcrReader, extract_altitude
 from src.colors import ColorDetector
-from src.alerts import AlertManager
 from src.config import ConfigManager
 from src.engine import MonitoringEngine
 from src.overlay import RegionOverlayManager
@@ -656,7 +655,6 @@ class BettyApp:
         }
 
         self._config = ConfigManager()
-        self._alert = AlertManager()
         self._detector = ColorDetector()
         self._ocr: OcrReader = OcrReader()
 
@@ -1025,7 +1023,6 @@ class BettyApp:
 
         self._engine = MonitoringEngine(
             monitors=self._monitors,
-            alert_manager=self._alert,
             ocr_reader=self._ocr,
             color_detector=self._detector,
             on_status=self._on_engine_status,
