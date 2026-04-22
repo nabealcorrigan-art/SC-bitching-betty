@@ -39,6 +39,7 @@ from src.capture import ScreenCapture
 from src.selector import RegionSelector
 from src.ocr import OcrReader, extract_altitude
 from src.colors import ColorDetector
+from src.alerts import AlertManager
 from src.config import ConfigManager
 from src.engine import MonitoringEngine
 from src.overlay import RegionOverlayManager
@@ -509,7 +510,7 @@ class MonitorDialog(tk.Toplevel):
         )
         m.sound_file = self._sound_var.get().strip()
         m.cooldown = max(0.0, cooldown)
-        m.poll_interval = max(0.02, poll)
+        m.poll_interval = max(0.0, poll)
 
         self.result = m
         self.destroy()
@@ -793,6 +794,8 @@ class BettyApp:
                    command=self._toggle_monitor).pack(side="left", padx=4)
         ttk.Button(crud, text="Drag & Select Region",
                    command=self._drag_select_region).pack(side="left", padx=4)
+        ttk.Button(crud, text="🔔 Test Alert",
+                   command=self._test_alert).pack(side="left", padx=4)
 
         # ── Live OCR output ───────────────────────────────────────────
         ocr_out_frame = ttk.LabelFrame(self._root, text="Live OCR Output")
@@ -982,6 +985,22 @@ class BettyApp:
             m.region = region
             self._save_config()
             self._refresh_tree()
+
+    def _test_alert(self) -> None:
+        """Manually fire the selected monitor's alert sound for testing."""
+        m = self._selected_monitor()
+        if not m:
+            messagebox.showinfo("No selection", "Please select a monitor.")
+            return
+        sound = m.sound_file or self._settings.get("default_sound_file", "")
+        if not sound:
+            messagebox.showinfo(
+                "No sound configured",
+                f"Monitor '{m.name}' has no sound file.\n\n"
+                "Set one in Edit Selected or configure a default in Settings.",
+            )
+            return
+        AlertManager().play(sound)
 
     # ------------------------------------------------------------------
     # Settings
