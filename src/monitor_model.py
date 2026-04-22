@@ -51,6 +51,11 @@ class OcrConfig:
                           ``"RALT  130m"``) and triggers when that number
                           is below *threshold_value*; handles the variable
                           spacing in Star Citizen's RALT HUD readout
+    ``ralt_contains``   – extracts the RALT altitude value (same parser as
+                          ``ralt_altitude_below``) and triggers when the
+                          altitude in metres exactly equals *trigger_text*
+                          (e.g. set *trigger_text* to ``"500"`` to fire an
+                          audible callout every time the RALT reads 500 m)
     """
 
     threshold_value: float = 0.0
@@ -141,7 +146,7 @@ class Monitor:
     cooldown: float = 5.0
     """Minimum seconds between consecutive alerts for this monitor."""
 
-    poll_interval: float = 0.5
+    poll_interval: float = 0.1
     """How often (seconds) to sample this region."""
 
     # ------------------------------------------------------------------
@@ -206,5 +211,5 @@ class Monitor:
             ),
             sound_file=data.get("sound_file", ""),
             cooldown=float(data.get("cooldown", 5.0)),
-            poll_interval=float(data.get("poll_interval", 0.5)),
+            poll_interval=float(data.get("poll_interval", 0.1)),
         )

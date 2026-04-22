@@ -150,11 +150,7 @@ class MonitoringEngine:
                     if now - last_alert >= monitor.cooldown:
                         pending_alerts.append(monitor)
 
-            # Among simultaneously triggered ralt_altitude_below monitors,
-            # only the one with the lowest threshold (most critical altitude)
-            # plays; higher-threshold ones are suppressed.
-            pending_alerts = self._apply_ralt_priority(pending_alerts)
-
+            # Play all pending alerts concurrently.
             for monitor in pending_alerts:
                 self._last_alert[monitor.id] = now
                 self._alert.play(monitor.sound_file)
@@ -162,26 +158,5 @@ class MonitoringEngine:
             # Short sleep to avoid busy-spinning at 100% CPU.
             time.sleep(0.005)
 
-    def _apply_ralt_priority(self, monitors: List[Monitor]) -> List[Monitor]:
-        """
-        Suppress higher-threshold ``ralt_altitude_below`` monitors when a
-        lower-threshold one is also ready to alert.
 
-        When two or more ``ralt_altitude_below`` rules trigger at the same
-        time, only the one with the lowest ``threshold_value`` (the most
-        critical altitude warning) plays.  Rules of any other type are
-        passed through unchanged.
-        """
-        ralt_candidates = [
-            m for m in monitors
-            if m.monitor_type == "ocr"
-            and m.ocr_config.match_type == "ralt_altitude_below"
-        ]
-        if len(ralt_candidates) <= 1:
-            return monitors
 
-        # Keep only the most critical (lowest threshold) RALT monitor.
-        # len(ralt_candidates) >= 2 here, so min() is always safe.
-        lowest = min(ralt_candidates, key=lambda m: m.ocr_config.threshold_value)
-        suppressed = {id(m) for m in ralt_candidates if m is not lowest}
-        return [m for m in monitors if id(m) not in suppressed]

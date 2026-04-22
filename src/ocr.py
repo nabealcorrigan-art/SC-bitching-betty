@@ -313,6 +313,17 @@ class OcrReader:
                 alt = extract_altitude(raw)
                 return alt is not None and alt < config.threshold_value
 
+            case "ralt_contains":
+                # Extract the RALT altitude and check whether trigger_text
+                # exactly matches the stringified altitude value.  Use this
+                # for audible altitude callouts: set trigger_text to the
+                # altitude in metres you want announced (e.g. "500" fires
+                # when RALT reads exactly 500 m).
+                alt = extract_altitude(raw)
+                if alt is None:
+                    return False
+                return config.trigger_text.strip() == str(alt)
+
             case _:
                 return False
 

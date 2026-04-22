@@ -173,7 +173,7 @@ class MonitorDialog(tk.Toplevel):
             textvariable=self._match_type_var,
             values=["contains", "exact", "regex",
                     "numeric_above", "numeric_below", "numeric_outside",
-                    "altitude_below", "ralt_altitude_below"],
+                    "altitude_below", "ralt_altitude_below", "ralt_contains"],
             state="readonly",
             width=18,
         )
@@ -324,7 +324,7 @@ class MonitorDialog(tk.Toplevel):
         ttk.Label(row, text="Poll interval (s):", width=16, anchor="e").pack(
             side="left"
         )
-        self._poll_var = tk.StringVar(value="0.5")
+        self._poll_var = tk.StringVar(value="0.1")
         ttk.Entry(row, textvariable=self._poll_var, width=8).pack(
             side="left", padx=(4, 0)
         )
@@ -1188,7 +1188,7 @@ class BettyApp:
                     num_str = str(num) if num is not None else "—"
                     preview = f"{preview}  →  {num_str}"
                 elif m.ocr_config.match_type in (
-                    "ralt_altitude_below", "altitude_below"
+                    "ralt_altitude_below", "ralt_contains", "altitude_below"
                 ):
                     # Prefer the robust RALT extractor.  For plain
                     # altitude_below, fall back to the simpler unit-suffix
