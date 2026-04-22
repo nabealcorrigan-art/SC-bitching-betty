@@ -1,9 +1,9 @@
 """
-overlay.py – Semi-transparent region overlay windows.
+overlay.py – Region outline overlay windows.
 
-Displays a slightly opaque, borderless, always-on-top window over each
-monitored screen region so the user can see exactly which area is being
-observed at a glance.
+Displays a borderless, always-on-top window over each monitored screen
+region so the user can see exactly which area is being observed at a glance.
+Only the outline border is shown; the interior is fully transparent.
 """
 
 from __future__ import annotations
@@ -19,15 +19,14 @@ try:
 except ImportError:
     _MSS_AVAILABLE = False
 
-_OVERLAY_ALPHA      = 0.35          # window-level transparency (0=invisible, 1=opaque)
-_OVERLAY_BG         = "#003366"     # dark-blue tint for the interior
+_TRANSPARENT_KEY    = "#010101"     # window bg colour made invisible via -transparentcolor
 _BORDER_COLOR       = "#00ccff"     # cyan outline colour
 _BORDER_WIDTH       = 3
 _MIN_OVERLAY_DIM    = 10            # minimum overlay width/height in logical pixels
 
 
 class _SingleOverlay:
-    """One semi-transparent overlay window highlighting a single screen region."""
+    """One outline-only overlay window highlighting a single screen region."""
 
     def __init__(
         self,
@@ -61,18 +60,26 @@ class _SingleOverlay:
         self._win = tk.Toplevel(self._root)
         self._win.overrideredirect(True)
         self._win.attributes("-topmost", True)
-        try:
-            self._win.attributes("-alpha", _OVERLAY_ALPHA)
-        except tk.TclError:
-            pass  # alpha not supported on this platform
 
         self._win.geometry(f"{lw}x{lh}+{lx}+{ly}")
+
+        # Make the background colour fully transparent so only the border is
+        # visible.  -transparentcolor is supported on Windows; on other
+        # platforms we fall back to a very low alpha so the outline is still
+        # clearly visible while the interior is nearly invisible.
+        try:
+            self._win.attributes("-transparentcolor", _TRANSPARENT_KEY)
+        except tk.TclError:
+            try:
+                self._win.attributes("-alpha", 0.6)
+            except tk.TclError:
+                pass
 
         self._canvas = tk.Canvas(
             self._win,
             width=lw,
             height=lh,
-            bg=_OVERLAY_BG,
+            bg=_TRANSPARENT_KEY,
             highlightthickness=0,
         )
         self._canvas.pack()
