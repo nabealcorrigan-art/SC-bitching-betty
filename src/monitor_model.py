@@ -46,6 +46,11 @@ class OcrConfig:
                           OCR text and triggers when that number is below
                           *threshold_value*; useful for Star Citizen altitude
                           readouts
+    ``ralt_altitude_below`` – looks for a radar-altitude string of the
+                          form ``RALT <spaces> <digits>m`` (e.g.
+                          ``"RALT  130m"``) and triggers when that number
+                          is below *threshold_value*; handles the variable
+                          spacing in Star Citizen's RALT HUD readout
     """
 
     threshold_value: float = 0.0
