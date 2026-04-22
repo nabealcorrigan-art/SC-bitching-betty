@@ -510,7 +510,7 @@ class MonitorDialog(tk.Toplevel):
         )
         m.sound_file = self._sound_var.get().strip()
         m.cooldown = max(0.0, cooldown)
-        m.poll_interval = max(0.1, poll)
+        m.poll_interval = max(0.02, poll)
 
         self.result = m
         self.destroy()

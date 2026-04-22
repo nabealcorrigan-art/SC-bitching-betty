@@ -149,4 +149,4 @@ class MonitoringEngine:
                         self._alert.play(monitor.sound_file)
 
             # Short sleep to avoid busy-spinning at 100% CPU.
-            time.sleep(0.05)
+            time.sleep(0.005)
