@@ -39,6 +39,7 @@ from src.colors import ColorDetector
 from src.alerts import AlertManager
 from src.config import ConfigManager
 from src.engine import MonitoringEngine
+from src.overlay import RegionOverlayManager
 
 
 # ---------------------------------------------------------------------------
@@ -630,6 +631,8 @@ class BettyApp:
         self._root.config(bd=2, relief="groove")
         self._root.protocol("WM_DELETE_WINDOW", self._on_close)
 
+        self._overlay_manager = RegionOverlayManager(self._root)
+
         self._build_ui()
         self._load_config()
         # Re-run dependency check now that settings (including the Tesseract
@@ -985,6 +988,8 @@ class BettyApp:
         )
         self._engine.start()
 
+        self._overlay_manager.show(self._monitors)
+
         self._start_btn.config(state="disabled")
         self._stop_btn.config(state="normal")
         self._status_var.set(self._STATUS_RUNNING)
@@ -993,6 +998,8 @@ class BettyApp:
         if self._engine:
             self._engine.stop()
             self._engine = None
+
+        self._overlay_manager.hide()
 
         self._live_status.clear()
         self._ocr_texts.clear()
