@@ -38,6 +38,12 @@ _INSTRUCTION  = (
 )
 _CONFIRM_INSTRUCTION = "Region selected!  Closing…"
 _CONFIRM_DELAY_MS    = 1200   # ms to keep the confirmed selection visible
+_COORDS_FONT  = ("Courier", 10, "bold")
+_COORDS_COLOR = "#ffff00"   # yellow – easy to read over any background
+_LABEL_OFFSET_X     = 6     # horizontal gap between selection edge and coord label
+_LABEL_OFFSET_ABOVE = 18    # pixels the label sits above the selection top edge
+_LABEL_MIN_Y        = 26    # minimum y at which the label fits above the selection
+_LABEL_OFFSET_BELOW = 6     # gap below the selection bottom edge when above won't fit
 
 
 class RegionSelector:
@@ -59,6 +65,7 @@ class RegionSelector:
         self._start_y: Optional[int] = None
         self._rect_id: Optional[int] = None
         self._banner_text_id: Optional[int] = None
+        self._coords_text_id: Optional[int] = None
         self._root: Optional[tk.Misc] = None
         self._canvas: Optional[tk.Canvas] = None
         # Scale factors from canvas (logical) pixels to physical screen pixels,
@@ -95,6 +102,7 @@ class RegionSelector:
         self._start_y = None
         self._rect_id = None
         self._banner_text_id = None
+        self._coords_text_id = None
 
         # ------------------------------------------------------------------
         # Create the overlay window (hidden) so we can query the real
@@ -235,6 +243,31 @@ class RegionSelector:
             dash=_RECT_DASH,
         )
 
+        # Live physical-coordinate readout so the user can verify accuracy.
+        x1 = min(self._start_x, event.x)
+        y1 = min(self._start_y, event.y)
+        x2 = max(self._start_x, event.x)
+        y2 = max(self._start_y, event.y)
+        px1 = int(x1 * self._scale_x) + self._monitor_left
+        py1 = int(y1 * self._scale_y) + self._monitor_top
+        pw  = int((x2 - x1) * self._scale_x)
+        ph  = int((y2 - y1) * self._scale_y)
+        coords_text = f"x={px1}  y={py1}  w={pw}  h={ph}"
+
+        # Place the label just below the top-left corner of the selection,
+        # shifting right or down when the cursor is near the screen edge.
+        label_x = x1 + _LABEL_OFFSET_X
+        label_y = y1 - _LABEL_OFFSET_ABOVE if y1 > _LABEL_MIN_Y else y2 + _LABEL_OFFSET_BELOW
+        if self._coords_text_id is not None:
+            self._canvas.delete(self._coords_text_id)
+        self._coords_text_id = self._canvas.create_text(
+            label_x, label_y,
+            text=coords_text,
+            fill=_COORDS_COLOR,
+            font=_COORDS_FONT,
+            anchor="nw",
+        )
+
     def _on_release(self, event: tk.Event) -> None:
         if self._start_x is None:
             return
@@ -264,6 +297,11 @@ class RegionSelector:
             "height": phys_y2 - phys_y1,
         }
 
+        # Remove the live coordinate readout.
+        if self._coords_text_id is not None:
+            self._canvas.delete(self._coords_text_id)
+            self._coords_text_id = None
+
         # Replace the dashed drag rectangle with a solid confirmed outline and
         # update the banner so the user can see the region before the overlay
         # closes.
@@ -274,9 +312,15 @@ class RegionSelector:
             outline=_RECT_COLOR,
             width=3,
         )
+        # Show final physical coords in the confirmed banner.
+        confirm_text = (
+            f"{_CONFIRM_INSTRUCTION}  "
+            f"x={phys_x1}  y={phys_y1}  "
+            f"w={self._region['width']}  h={self._region['height']}"
+        )
         if self._banner_text_id:
             self._canvas.itemconfig(
-                self._banner_text_id, text=_CONFIRM_INSTRUCTION
+                self._banner_text_id, text=confirm_text
             )
         self._canvas.unbind("<ButtonPress-1>")
         self._canvas.unbind("<B1-Motion>")
