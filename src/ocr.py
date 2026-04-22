@@ -238,6 +238,18 @@ class OcrReader:
                     return False
                 return float(m.group(1)) < config.threshold_value
 
+            case "ralt_altitude_below":
+                # Look for the Star Citizen radar-altitude readout:
+                #   RALT  <one or more spaces>  <digits>m
+                # The number of spaces between "RALT" and the value varies
+                # so \s+ is used.  Matching is case-insensitive.  The "m"
+                # unit must not be followed by another word character so
+                # "RALT 130MHz" would not be mistakenly matched.
+                m = re.search(r"RALT\s+(\d+)[mM](?!\w)", raw, re.IGNORECASE)
+                if m is None:
+                    return False
+                return float(m.group(1)) < config.threshold_value
+
             case _:
                 return False
 
