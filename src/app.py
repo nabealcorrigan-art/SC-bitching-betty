@@ -1120,6 +1120,14 @@ class BettyApp:
                 # Show the text on one line, trimmed; use repr so
                 # invisible whitespace / newlines are visible.
                 preview = repr(raw.strip()) if raw.strip() else "(no text)"
+                # For numeric match modes also show the extracted number
+                # so the user can see which digits the program compares.
+                if m.ocr_config.match_type in (
+                    "numeric_above", "numeric_below", "numeric_outside"
+                ):
+                    num = self._ocr.extract_number(raw) if raw.strip() else None
+                    num_str = str(num) if num is not None else "—"
+                    preview = f"{preview}  →  {num_str}"
                 lines.append(f"[{m.name}]  {preview}")
         display = "\n".join(lines) if lines else "(no OCR monitors active)"
         try:

@@ -229,6 +229,17 @@ class OcrReader:
             case _:
                 return False
 
+    def extract_number(self, text: str) -> Optional[float]:
+        """
+        Strip non-numeric characters from *text* and return the first
+        number found, or ``None`` if no number is present.
+
+        This is the same extraction used internally by the numeric match
+        modes, exposed here so callers (e.g. the UI display) can show the
+        value the program will actually compare against the threshold.
+        """
+        return self._first_number(self._strip_non_numeric(text))
+
     # ------------------------------------------------------------------
     # Private
     # ------------------------------------------------------------------
