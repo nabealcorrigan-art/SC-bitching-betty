@@ -52,8 +52,8 @@ class OcrConfig:
                           is below *threshold_value*; handles the variable
                           spacing in Star Citizen's RALT HUD readout
     ``ralt_contains``   – extracts the RALT altitude value (same parser as
-                          ``ralt_altitude_below``) and triggers when
-                          *trigger_text* appears in the stringified altitude
+                          ``ralt_altitude_below``) and triggers when the
+                          altitude in metres exactly equals *trigger_text*
                           (e.g. set *trigger_text* to ``"500"`` to fire an
                           audible callout every time the RALT reads 500 m)
     """
