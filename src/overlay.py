@@ -23,8 +23,6 @@ _OVERLAY_ALPHA      = 0.35          # window-level transparency (0=invisible, 1=
 _OVERLAY_BG         = "#003366"     # dark-blue tint for the interior
 _BORDER_COLOR       = "#00ccff"     # cyan outline colour
 _BORDER_WIDTH       = 3
-_LABEL_FG           = "#ffffff"
-_LABEL_FONT         = ("TkDefaultFont", 9, "bold")   # system default – works on all platforms
 _MIN_OVERLAY_DIM    = 10            # minimum overlay width/height in logical pixels
 
 
@@ -35,14 +33,12 @@ class _SingleOverlay:
         self,
         root: tk.Misc,
         region: Dict,
-        name: str,
         scale_x: float,
         scale_y: float,
     ) -> None:
         self._root = root
         self._scale_x = scale_x
         self._scale_y = scale_y
-        self._name = name
         self._win: Optional[tk.Toplevel] = None
         self._canvas: Optional[tk.Canvas] = None
         self._build(region)
@@ -83,7 +79,7 @@ class _SingleOverlay:
         self._draw(lw, lh)
 
     def _draw(self, lw: int, lh: int) -> None:
-        """Populate canvas items (border + optional name label)."""
+        """Populate canvas items (border)."""
         bw = _BORDER_WIDTH
         # Border rectangle
         self._canvas.create_rectangle(
@@ -92,15 +88,6 @@ class _SingleOverlay:
             width=bw,
             fill="",
         )
-        # Name label centred near the top
-        if self._name:
-            self._canvas.create_text(
-                lw // 2,
-                min(14, lh // 4),
-                text=self._name,
-                fill=_LABEL_FG,
-                font=_LABEL_FONT,
-            )
 
     # ------------------------------------------------------------------
     # Public API
@@ -180,7 +167,6 @@ class RegionOverlayManager:
             self._overlays[m.id] = _SingleOverlay(
                 self._root,
                 m.region,
-                name=m.name,
                 scale_x=self._scale_x,
                 scale_y=self._scale_y,
             )
