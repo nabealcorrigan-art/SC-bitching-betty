@@ -39,6 +39,28 @@ logger = logging.getLogger(__name__)
 # threshold matching.
 _OCR_NOISE_PATTERN = re.compile(r"[^a-zA-Z0-9\s.,]")
 
+# ---------------------------------------------------------------------------
+# RALT (radar altitude) extraction
+# ---------------------------------------------------------------------------
+
+# OCR-artifact label variants for "RALT", in longest-first order so the
+# alternation engine matches the most specific option first.
+_RALT_LABEL_RE = re.compile(
+    r"^\s*"                              # ignore leading whitespace
+    r"(?:\S{1,3}\s+)?"                  # optional 1-3 noise chars + whitespace
+    r"(?:ORALT|ReALT|RALT|RAT|RAL|ALT)" # label variants (longest first)
+    r"[.,]?\s+"                         # separator: optional . or , then spaces
+    r"([A-Za-z0-9]+)",                  # value field (may contain OCR noise)
+    re.IGNORECASE,
+)
+
+# Common OCR substitutions found inside a digit sequence.
+# S/s → 5,  O (capital only) → 0,  B → 8
+_DIGIT_FIXES = str.maketrans("SsOB", "5508")
+
+# Sanity-check bounds for radar altitude readings.
+_RALT_MAX_METERS = 99_999
+
 # For *numeric* modes only keep characters that can appear in a number:
 # digits, decimal separators, sign chars, and spaces (used as separators).
 _NON_NUMERIC_PATTERN = re.compile(r"[^\d.,+\- ]")
@@ -46,6 +68,52 @@ _NON_NUMERIC_PATTERN = re.compile(r"[^\d.,+\- ]")
 # Lazily-created shared MiniRacer context (V8 isolate).  Creating one
 # instance once and reusing it avoids repeated isolate-startup overhead.
 _js_context: Optional["_MiniRacer"] = None
+
+
+def extract_altitude(text: str) -> "int | None":
+    """
+    Extract a RALT (radar altitude) reading from a noisy OCR frame.
+
+    The function searches each line of *text* for a RALT label followed by
+    an altitude value.  It tolerates common OCR artefacts:
+
+    * Label may appear as any of: RALT, RAT, RAL, ReALT, ORALT, ALT.
+    * Up to three noise characters may precede the label on the same line
+      (e.g. ``"x RALT 195m"``).
+    * The label–value separator may be spaces, a period, or a comma+spaces
+      (e.g. ``"RALT. 385m"``, ``"RALT,  397m"``).
+    * The trailing ``m`` unit marker is optional and may be followed by
+      punctuation (both are ignored).
+    * Common digit OCR errors are corrected before parsing:
+      ``S``/``s`` → ``5``, capital ``O`` → ``0``, ``B`` → ``8``.
+    * The altitude must be a whole number in [0, 99999] metres; any other
+      reading is rejected.
+
+    Parameters
+    ----------
+    text:
+        Full multi-line OCR output for one monitor frame.
+
+    Returns
+    -------
+    int | None
+        Altitude in metres, or ``None`` if no reliable reading is found.
+    """
+    for line in text.splitlines():
+        m = _RALT_LABEL_RE.match(line.strip())
+        if m is None:
+            continue
+        raw = m.group(1)
+        # Strip trailing unit marker "m"/"M"; it is not part of the number.
+        if raw and raw[-1] in ("m", "M"):
+            raw = raw[:-1]
+        corrected = raw.translate(_DIGIT_FIXES)
+        if not corrected.isdigit():
+            continue
+        altitude = int(corrected)
+        if 0 <= altitude <= _RALT_MAX_METERS:
+            return altitude
+    return None
 
 
 def _get_js_context() -> Optional["_MiniRacer"]:
@@ -239,16 +307,11 @@ class OcrReader:
                 return float(m.group(1)) < config.threshold_value
 
             case "ralt_altitude_below":
-                # Look for the Star Citizen radar-altitude readout:
-                #   RALT  <one or more spaces>  <digits>m
-                # The number of spaces between "RALT" and the value varies
-                # so \s+ is used.  Matching is case-insensitive.  The "m"
-                # unit must not be followed by another word character so
-                # "RALT 130MHz" would not be mistakenly matched.
-                m = re.search(r"RALT\s+(\d+)[mM](?!\w)", raw, re.IGNORECASE)
-                if m is None:
-                    return False
-                return float(m.group(1)) < config.threshold_value
+                # Use the robust RALT extractor which handles common OCR
+                # label and digit artefacts (see extract_altitude for full
+                # list of noise patterns).
+                alt = extract_altitude(raw)
+                return alt is not None and alt < config.threshold_value
 
             case _:
                 return False
