@@ -41,6 +41,11 @@ class OcrConfig:
                           > *threshold_value_high*; use this to alert when
                           a reading leaves a normal range
                           (non-numeric characters are ignored)
+    ``altitude_below``  – looks for a value in the form ``<digits>m``
+                          (e.g. ``"2103m"`` or ``"102m"``) anywhere in the
+                          OCR text and triggers when that number is below
+                          *threshold_value*; useful for Star Citizen altitude
+                          readouts
     """
 
     threshold_value: float = 0.0
