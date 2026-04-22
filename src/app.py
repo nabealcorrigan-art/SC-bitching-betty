@@ -167,7 +167,8 @@ class MonitorDialog(tk.Toplevel):
             row,
             textvariable=self._match_type_var,
             values=["contains", "exact", "regex",
-                    "numeric_above", "numeric_below", "numeric_outside"],
+                    "numeric_above", "numeric_below", "numeric_outside",
+                    "altitude_below"],
             state="readonly",
             width=18,
         )
@@ -388,7 +389,8 @@ class MonitorDialog(tk.Toplevel):
 
     def _toggle_numeric(self, event=None) -> None:
         mt = self._match_type_var.get()
-        if mt in ("numeric_above", "numeric_below", "numeric_outside"):
+        if mt in ("numeric_above", "numeric_below", "numeric_outside",
+                  "altitude_below"):
             self._ocr_thresh_entry.config(state="normal")
         else:
             self._ocr_thresh_entry.config(state="disabled")

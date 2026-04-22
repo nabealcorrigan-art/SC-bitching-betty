@@ -226,6 +226,18 @@ class OcrReader:
                     or value > config.threshold_value_high
                 )
 
+            case "altitude_below":
+                # Find the first occurrence of "<digits>m" (e.g. "2103m",
+                # "102m") and trigger when the numeric part is below the
+                # threshold.  The match is case-insensitive so both "m"
+                # and "M" are accepted.  The unit letter must not be
+                # followed by another word character so that altitude
+                # readings are not confused with words like "MHz".
+                m = re.search(r"(\d+)[mM](?!\w)", raw)
+                if m is None:
+                    return False
+                return float(m.group(1)) < config.threshold_value
+
             case _:
                 return False
 
