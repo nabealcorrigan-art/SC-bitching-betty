@@ -23,6 +23,7 @@ import copy
 import os
 import datetime
 import logging
+import re
 import tkinter as tk
 from tkinter import (
     colorchooser,
@@ -36,7 +37,7 @@ from typing import Dict, List, Optional
 from src.monitor_model import ColorConfig, Monitor, OcrConfig
 from src.capture import ScreenCapture
 from src.selector import RegionSelector
-from src.ocr import OcrReader
+from src.ocr import OcrReader, extract_altitude
 from src.colors import ColorDetector
 from src.alerts import AlertManager
 from src.config import ConfigManager
@@ -190,7 +191,7 @@ class MonitorDialog(tk.Toplevel):
             state="disabled"
         )
         self._ocr_thresh_entry.pack(side="left", padx=(4, 0))
-        ttk.Label(row, text="(for numeric match types)").pack(
+        ttk.Label(row, text="(for numeric and altitude match types)").pack(
             side="left", padx=4
         )
 
@@ -473,6 +474,20 @@ class MonitorDialog(tk.Toplevel):
                 parent=self,
             )
             return
+
+        if (
+            self._match_type_var.get() in ("altitude_below", "ralt_altitude_below")
+            and ocr_thresh <= 0
+        ):
+            messagebox.showwarning(
+                "Threshold not set",
+                "The threshold value is 0 or negative.\n\n"
+                "Altitude readings are always ≥ 0 m, so the alert will "
+                "never trigger with this setting.\n\n"
+                "Set the threshold to the altitude in metres at which you "
+                "want the alert to fire (e.g. 4000 for 4000 m).",
+                parent=self,
+            )
 
         m = self._monitor
         m.name = self._name_var.get().strip() or "Monitor"
@@ -1172,6 +1187,24 @@ class BettyApp:
                     num = self._ocr.extract_number(raw) if raw.strip() else None
                     num_str = str(num) if num is not None else "—"
                     preview = f"{preview}  →  {num_str}"
+                elif m.ocr_config.match_type in (
+                    "ralt_altitude_below", "altitude_below"
+                ):
+                    # Prefer the robust RALT extractor.  For plain
+                    # altitude_below, fall back to the simpler unit-suffix
+                    # regex so the display still shows a value when the RALT
+                    # label was not recognised by extract_altitude.
+                    alt = extract_altitude(raw) if raw.strip() else None
+                    if (
+                        alt is None
+                        and m.ocr_config.match_type == "altitude_below"
+                        and raw.strip()
+                    ):
+                        hit = re.search(r"(\d+)[mM](?!\w)", raw)
+                        if hit:
+                            alt = int(hit.group(1))
+                    alt_str = f"{alt}m" if alt is not None else "—"
+                    preview = f"{preview}  →  RALT {alt_str}"
                 lines.append(f"[{m.name}]  {preview}")
         display = "\n".join(lines) if lines else "(no OCR monitors active)"
         try:
