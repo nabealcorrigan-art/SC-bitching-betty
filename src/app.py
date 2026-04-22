@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import copy
 import os
+import datetime
+import logging
 import tkinter as tk
 from tkinter import (
     colorchooser,
@@ -41,6 +43,8 @@ from src.config import ConfigManager
 from src.engine import MonitoringEngine
 from src.overlay import RegionOverlayManager
 
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Helper – small icon square for a colour swatch
@@ -542,6 +546,18 @@ class SettingsDialog(tk.Toplevel):
         ttk.Button(row, text="Browse…",
                    command=self._pick_sound).pack(side="left")
 
+        row = ttk.Frame(self)
+        row.pack(fill="x", **pad)
+        ttk.Label(row, text="OCR log file:", width=18, anchor="e").pack(
+            side="left"
+        )
+        self._ocr_log_var = tk.StringVar()
+        ttk.Entry(row, textvariable=self._ocr_log_var, width=36).pack(
+            side="left", padx=4
+        )
+        ttk.Button(row, text="Browse…",
+                   command=self._pick_ocr_log).pack(side="left")
+
         row = ttk.Label(
             self,
             text=(
@@ -563,6 +579,7 @@ class SettingsDialog(tk.Toplevel):
     def _populate(self) -> None:
         self._tess_var.set(self._settings.get("tesseract_cmd", ""))
         self._sound_var.set(self._settings.get("default_sound_file", ""))
+        self._ocr_log_var.set(self._settings.get("ocr_log_file", ""))
 
     def _pick_tess(self) -> None:
         path = filedialog.askopenfilename(
@@ -583,10 +600,21 @@ class SettingsDialog(tk.Toplevel):
         if path:
             self._sound_var.set(path)
 
+    def _pick_ocr_log(self) -> None:
+        path = filedialog.asksaveasfilename(
+            title="Select OCR log file",
+            defaultextension=".txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+            parent=self,
+        )
+        if path:
+            self._ocr_log_var.set(path)
+
     def _on_ok(self) -> None:
         self.result = {
             "tesseract_cmd": self._tess_var.get().strip(),
             "default_sound_file": self._sound_var.get().strip(),
+            "ocr_log_file": self._ocr_log_var.get().strip(),
         }
         self.destroy()
 
@@ -1105,6 +1133,20 @@ class BettyApp:
 
     def _on_engine_ocr_text(self, monitor_id: str, text: str) -> None:
         self._ocr_texts[monitor_id] = text
+        # Write to OCR log file if one is configured.
+        log_path = self._settings.get("ocr_log_file", "").strip()
+        if log_path and text.strip():
+            monitor_name = next(
+                (m.name for m in self._monitors if m.id == monitor_id),
+                monitor_id,
+            )
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            line = f"{timestamp} [{monitor_name}] {text.strip()}\n"
+            try:
+                with open(log_path, "a", encoding="utf-8") as fh:
+                    fh.write(line)
+            except OSError as exc:
+                logger.warning("Could not write to OCR log file %r: %s", log_path, exc)
         if not self._ocr_display_pending:
             self._ocr_display_pending = True
             self._root.after(200, self._do_ocr_display)

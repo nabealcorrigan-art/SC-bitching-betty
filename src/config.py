@@ -79,6 +79,7 @@ class ConfigManager:
             "settings": {
                 "tesseract_cmd": "",
                 "default_sound_file": "",
+                "ocr_log_file": "",
             },
             "monitors": [],
         }
